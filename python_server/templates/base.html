@@ -6,24 +6,26 @@
     <title>{% block title %}Home Manager{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="page-{{ request.endpoint or 'unknown' }}">
+    {% if request.endpoint not in ['home', 'login', 'login_page', 'register', 'register_page'] %}
     <header class="topbar">
         <nav class="topbar-inner" aria-label="주요 메뉴">
             <a class="brand" href="{{ url_for('dashboard') }}">
                 <span class="brand-mark">HM</span>
                 <span>
                     <strong>Home Manager</strong>
-                    <small>Smart home dashboard</small>
+                    <small>TCP/IP 스마트홈 대시보드</small>
                 </span>
             </a>
             <div class="room-nav" aria-label="방 바로가기">
-                <a href="{{ url_for('room_detail', room_id=1) }}">Living</a>
-                <a href="{{ url_for('room_detail', room_id=2) }}">Bedroom</a>
-                <a href="{{ url_for('room_detail', room_id=3) }}">Kitchen</a>
+                <a href="{{ url_for('room_detail', room_id=1) }}">거실</a>
+                <a href="{{ url_for('room_detail', room_id=2) }}">침실</a>
+                <a href="{{ url_for('room_detail', room_id=3) }}">주방</a>
             </div>
-            <a class="refresh-link" href="{{ request.path }}">Refresh</a>
+            <a class="refresh-link" href="{{ request.path }}">새로고침</a>
         </nav>
     </header>
+    {% endif %}
     <main>{% block content %}{% endblock %}</main>
 </body>
 </html>
