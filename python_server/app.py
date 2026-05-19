@@ -1,7 +1,10 @@
-from flask import Flask, jsonify, render_template, request
+import os
+
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from db import fetch_all, execute
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me")
 
 LATEST_SENSOR_SQL = """
 SELECT r.room_id, r.room_name, s.sensor_name, st.type_name, sr.measured_value, st.unit, sr.measured_time
@@ -106,14 +109,21 @@ def api_login():
     password = data.get("password")
     
     user = fetch_all(
-        "SELECT user_id, user_name FROM `USER` WHERE user_name = %s AND password = %s",
+        "SELECT user_id, user_name FROM `USER` WHERE user_name = %s AND pw = %s",
         (name, password)
     )
     
     if user:
+        session["user_id"] = user[0]["user_id"]
+        session["user_name"] = user[0]["user_name"]
         return jsonify({"success": True, "message": "로그인 성공", "user_id": user[0]["user_id"]})
     else:
         return jsonify({"success": False, "message": "사용자명 또는 비밀번호가 잘못되었습니다."}), 401
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("home"))
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
@@ -134,14 +144,22 @@ def api_register():
     
     try:
         execute(
-            "INSERT INTO `USER` (user_name, password) VALUES (%s, %s)",
-            (name, password)
+            """
+            INSERT INTO `USER` (user_id, role_id, user_name, pw)
+            SELECT COALESCE(MAX(user_id), 0) + 1, %s, %s, %s
+            FROM `USER`
+            """,
+            (3, name, password)
         )
         return jsonify({"success": True, "message": "회원가입이 완료되었습니다."})
     except Exception as e:
         return jsonify({"success": False, "message": f"회원가입 중 오류가 발생했습니다: {str(e)}"}), 500
 
 @app.route("/")
+def home():
+    return render_template("login.html")
+
+@app.route("/dashboard")
 def dashboard():
     return render_template(
         "index.html",
