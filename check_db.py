@@ -1,4 +1,4 @@
-from db import fetch_all
+from main import fetch_all
 
 
 def main():
