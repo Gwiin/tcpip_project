@@ -1,35 +1,41 @@
 {% extends 'base.html' %}
-{% block title %} 회원가입 {% endblock %}
+{% block title %}회원가입{% endblock %}
 {% block content %}
-<h2>회원가입</h2>
-<form id="registerForm">
-<input type="text" id="user_id" placeholder="이름(로그인 ID)" required>
-<input type="password" id="password" placeholder="비밀번호" required>
-<button type="submit">가입완료</button>
-</form>
-<p>ID/PW가 생각 났나요?<a href="/">로그인 하러가기</a></p>
+<section class="auth-shell">
+    <div class="auth-card">
+        <div class="auth-brand">
+            <span class="brand-mark">HM</span>
+            <h1>회원가입</h1>
+        </div>
+        <form id="registerForm" class="auth-form">
+            <input type="text" id="user_id" placeholder="이름(로그인 ID)" required>
+            <input type="password" id="password" placeholder="비밀번호" required>
+            <button type="submit">가입 완료</button>
+        </form>
+        <p class="auth-link">이미 계정이 있나요? <a href="/">로그인</a></p>
+    </div>
+</section>
 
 <script>
-document.getElementById('registerForm').addEventListener('submit', 
-    async(e)=>{
-        e.preventDefault();
-        const data = {
-            name : document.getElementById('user_id').value,
-            password : document.getElementById('password').value,
-        }
-        const response = await fetch('/api/register', {
-            method : 'POST',
-            headers: {'content-type' : 'application/json'},
-            body : JSON.stringify(data)
-        });
-        const result = await response.json();
-        if(response.ok && result.success){
-            window.location.href = '/';
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = {
+        name: document.getElementById('user_id').value,
+        password: document.getElementById('password').value,
+    };
 
-        }else{
-            alert(result.message || '회원가입 실패')
-        }
+    const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(data)
+    });
+
+    const result = await response.json();
+    if (response.ok && result.success) {
+        window.location.href = '/';
+    } else {
+        alert(result.message || '회원가입 실패');
     }
-)
+});
 </script>
 {% endblock %}

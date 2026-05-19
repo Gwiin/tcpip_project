@@ -1,65 +1,90 @@
 {% extends "base.html" %}
 {% block title %}대시보드{% endblock %}
 {% block content %}
-<section class="grid three">
-    <article class="card">
-        <h2>방별 평균 온도</h2>
-        {% for row in avg_temperatures %}<p>{{ row.room_name }} <strong>{{ row.avg_temperature }} °C</strong></p>{% endfor %}
-    </article>
-    <article class="card">
-        <h2>현재 방 상태</h2>
-        {% for row in room_statuses %}<p>{{ row.room_name }} <strong>{{ row.status_name }}</strong></p>{% endfor %}
-    </article>
-    <article class="card">
-        <h2>현재 사용자 위치</h2>
-        {% for row in user_locations %}<p>{{ row.user_name }} <strong>{{ row.current_location }}</strong></p>{% endfor %}
-    </article>
-</section>
+<div class="dashboard-layout">
+    <div class="dashboard-content">
+        <section class="page-heading">
+            <h1>스마트홈 대시보드</h1>
+            <p>수집된 센서값과 방 상태, 예약 정보를 확인합니다.</p>
+        </section>
 
-<section class="card">
-    <h2>최신 센서값</h2>
-    <table>
-        <tr><th>방</th><th>센서</th><th>값</th><th>시각</th></tr>
-        {% for row in latest_sensors %}
-        <tr>
-            <td><a href="{{ url_for('room_detail', room_id=row.room_id) }}">{{ row.room_name }}</a></td>
-            <td>{{ row.sensor_name }}</td>
-            <td>{{ row.measured_value }} {{ row.unit }}</td>
-            <td>{{ row.measured_time }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-</section>
+        <section class="grid three">
+            <article class="card">
+                <h2>방별 평균 온도</h2>
+                {% for row in avg_temperatures %}<p>{{ row.room_name }} <strong>{{ row.avg_temperature }} °C</strong></p>{% endfor %}
+            </article>
+            <article class="card">
+                <h2>현재 방 상태</h2>
+                {% for row in room_statuses %}<p>{{ row.room_name }} <strong>{{ row.status_name }}</strong></p>{% endfor %}
+            </article>
+            <article class="card">
+                <h2>현재 사용자 위치</h2>
+                {% for row in user_locations %}<p>{{ row.user_name }} <strong>{{ row.current_location }}</strong></p>{% endfor %}
+            </article>
+        </section>
 
-<section class="grid two">
-    <article class="card">
-        <h2>현재 동작 중인 액추에이터</h2>
-        {% for row in active_actuators %}
-        <p>{{ row.room_name }} · {{ row.actuator_name }} <strong>{{ row.state_value }}</strong></p>
-        {% else %}
-        <p>현재 동작 중인 액추에이터가 없습니다.</p>
-        {% endfor %}
-    </article>
-    <article class="card">
-        <h2>예약 현황</h2>
-        {% for row in reservations %}
-        <p>{{ row.room_name }} · {{ row.user_name }} · {{ row.reservation_status }}</p>
-        {% endfor %}
-    </article>
-</section>
+        <section class="card">
+            <h2>최신 센서값</h2>
+            <div class="table-wrap">
+                <table>
+                    <tr><th>방</th><th>센서</th><th>값</th><th>시각</th></tr>
+                    {% for row in latest_sensors %}
+                    <tr>
+                        <td><a href="{{ url_for('room_detail', room_id=row.room_id) }}">{{ row.room_name }}</a></td>
+                        <td>{{ row.sensor_name }}</td>
+                        <td>{{ row.measured_value }} {{ row.unit }}</td>
+                        <td>{{ row.measured_time }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+        </section>
 
-<section class="grid two">
-    <article class="card">
-        <h2>최근 센서 로그</h2>
-        {% for row in recent_readings %}
-        <p>{{ row.room_name }} · {{ row.sensor_name }} · {{ row.measured_value }} {{ row.unit }}</p>
-        {% endfor %}
-    </article>
-    <article class="card">
-        <h2>최근 액추에이터 로그</h2>
-        {% for row in recent_actuators %}
-        <p>{{ row.room_name }} · {{ row.actuator_name }} · {{ row.state_value }}</p>
-        {% endfor %}
-    </article>
-</section>
+        <section class="grid two">
+            <article class="card">
+                <h2>현재 동작 중인 액추에이터</h2>
+                {% for row in active_actuators %}
+                <p>{{ row.room_name }} · {{ row.actuator_name }} <strong>{{ row.state_value }}</strong></p>
+                {% else %}
+                <p>현재 동작 중인 액추에이터가 없습니다.</p>
+                {% endfor %}
+            </article>
+            <article class="card">
+                <h2>예약 현황</h2>
+                {% for row in reservations %}
+                <p>{{ row.room_name }} · {{ row.user_name }} · {{ row.reservation_status }}</p>
+                {% endfor %}
+            </article>
+        </section>
+
+        <section class="grid two">
+            <article class="card">
+                <h2>최근 센서 로그</h2>
+                {% for row in recent_readings %}
+                <p>{{ row.room_name }} · {{ row.sensor_name }} · {{ row.measured_value }} {{ row.unit }}</p>
+                {% endfor %}
+            </article>
+            <article class="card">
+                <h2>최근 액추에이터 로그</h2>
+                {% for row in recent_actuators %}
+                <p>{{ row.room_name }} · {{ row.actuator_name }} · {{ row.state_value }}</p>
+                {% endfor %}
+            </article>
+        </section>
+    </div>
+
+    <aside class="side-panel" aria-label="빠른 이동">
+        <h2>방 상세 보기</h2>
+        <div class="toggle-list">
+            <a href="{{ url_for('room_detail', room_id=1) }}">거실</a>
+            <a href="{{ url_for('room_detail', room_id=2) }}">침실</a>
+            <a href="{{ url_for('room_detail', room_id=3) }}">주방</a>
+        </div>
+        <div class="side-actions">
+            <a href="{{ url_for('dashboard') }}">대시보드</a>
+            <a href="{{ request.path }}">새로고침</a>
+            <a href="{{ url_for('logout') }}">로그아웃</a>
+        </div>
+    </aside>
+</div>
 {% endblock %}
