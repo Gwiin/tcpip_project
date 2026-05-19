@@ -1,19 +1,63 @@
 import os
 
+import mysql.connector
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from db import execute, fetch_all
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me")
-app.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST")
-app.config["MYSQL_USER"] = os.getenv("MYSQL_USER")
-app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD")
-app.config["MYSQL_DB"] = os.getenv("MYSQL_DB")
+app.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "163.152.213.111")
+app.config["MYSQL_PORT"] = int(os.getenv("MYSQL_PORT", "3306"))
+app.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "root")
+app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "")
+app.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "Home_Manager")
+
+TCP_HOST = os.getenv("HOME_MANAGER_TCP_HOST", "0.0.0.0")
+TCP_PORT = int(os.getenv("HOME_MANAGER_TCP_PORT", "4242"))
+
+
+def get_connection():
+    return mysql.connector.connect(
+        host=app.config["MYSQL_HOST"],
+        port=app.config["MYSQL_PORT"],
+        user=app.config["MYSQL_USER"],
+        password=app.config["MYSQL_PASSWORD"],
+        database=app.config["MYSQL_DB"],
+    )
+
+
+def fetch_all(query, params=None):
+    conn = get_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute(query, params or ())
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
+
+def execute(query, params=None):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(query, params or ())
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def execute_many(statements):
+    conn = get_connection()
+    cur = conn.cursor()
+    for query, params in statements:
+        cur.execute(query, params)
+    conn.commit()
+    cur.close()
+    conn.close()
+
 
 LATEST_SENSOR_SQL = """
 SELECT r.room_id, r.room_name, s.sensor_name, st.type_name, sr.measured_value, st.unit, sr.measured_time
@@ -69,7 +113,7 @@ ORDER BY r.room_id
 """
 
 USER_LOCATION_SQL = """
-SELECT u.user_name, COALESCE(r.room_name, '위치 없음') AS current_location
+SELECT u.user_name, COALESCE(r.room_name, '\uc704\uce58 \uc5c6\uc74c') AS current_location
 FROM USER_LOCATION ul
 JOIN `USER` u ON ul.user_id = u.user_id
 LEFT JOIN ROOM r ON ul.room_id = r.room_id
@@ -104,6 +148,10 @@ LIMIT 10
 """
 
 
+def is_logged_in():
+    return "user_id" in session
+
+
 @app.route("/")
 def home():
     return render_template("login.html")
@@ -128,18 +176,17 @@ def api_login():
     if not name or not password:
         return jsonify({"success": False, "message": "사용자명과 비밀번호를 입력해주세요."}), 400
 
-    user = fetch_all(
+    rows = fetch_all(
         "SELECT user_id, user_name, pw FROM `USER` WHERE user_name = %s",
         (name,),
     )
 
-    if not user or not check_password_hash(user[0]["pw"], password):
+    if not rows or not check_password_hash(rows[0]["pw"], password):
         return jsonify({"success": False, "message": "사용자명 또는 비밀번호가 올바르지 않습니다."}), 401
 
-    session["user_id"] = user[0]["user_id"]
-    session["user_name"] = user[0]["user_name"]
-    return jsonify({"success": True, "message": "로그인 성공", "user_id": user[0]["user_id"]})
-
+    session["user_id"] = rows[0]["user_id"]
+    session["user_name"] = rows[0]["user_name"]
+    return jsonify({"success": True, "message": "로그인 성공", "user_id": rows[0]["user_id"]})
 
 @app.route("/logout")
 def logout():
@@ -177,7 +224,6 @@ def api_register():
         return jsonify({"success": False, "message": f"회원가입 중 오류가 발생했습니다: {exc}"}), 500
 
     return jsonify({"success": True, "message": "회원가입이 완료되었습니다."})
-
 
 @app.route("/dashboard")
 def dashboard():
@@ -247,4 +293,4 @@ def temperature_history(room_id):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True, port=5000, host="127.0.0.1")
