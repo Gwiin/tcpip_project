@@ -4,7 +4,7 @@
 <h2>회원가입</h2>
 <form id="registerForm">
 <input type="text" id="user_id" placeholder="이름(로그인 ID)" required>
-<input type="text" id="password" placeholder="비밀번호" required>
+<input type="password" id="password" placeholder="비밀번호" required>
 <button type="submit">가입완료</button>
 </form>
 <p>ID/PW가 생각 났나요?<a href="/">로그인 하러가기</a></p>
@@ -27,7 +27,7 @@ document.getElementById('registerForm').addEventListener('submit',
             window.location.href = '/';
 
         }else{
-            alert('회원 가입 실패')
+            alert(result.message || '회원가입 실패')
         }
     }
 )

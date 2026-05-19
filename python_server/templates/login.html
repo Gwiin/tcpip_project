@@ -4,7 +4,7 @@
 <h2>로그인</h2>
 <form id="loginForm">
 <input type="text" id="name" placeholder="사용자 이름" required>
-<input type="text" id="password" placeholder="비밀 번호" required>
+<input type="password" id="password" placeholder="비밀 번호" required>
 <button type="submit">로그인</button>
 </form>
 <p>계정이 없으신가요? <a href="/register_page">회원 가입 하러가기</a></p>
@@ -22,7 +22,7 @@ document.getElementById('loginForm').addEventListener('submit',
         });
         const result = await response.json();
         if(response.ok && result.success){
-            window.location.href = '/';
+            window.location.href = '/dashboard';
 
         }else{
             alert(result.message || '로그인 실패')
