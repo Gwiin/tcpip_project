@@ -2,6 +2,7 @@ import os
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from db import execute, fetch_all
 
@@ -128,11 +129,11 @@ def api_login():
         return jsonify({"success": False, "message": "사용자명과 비밀번호를 입력해주세요."}), 400
 
     user = fetch_all(
-        "SELECT user_id, user_name FROM `USER` WHERE user_name = %s AND pw = %s",
-        (name, password),
+        "SELECT user_id, user_name, pw FROM `USER` WHERE user_name = %s",
+        (name,),
     )
 
-    if not user:
+    if not user or not check_password_hash(user[0]["pw"], password):
         return jsonify({"success": False, "message": "사용자명 또는 비밀번호가 올바르지 않습니다."}), 401
 
     session["user_id"] = user[0]["user_id"]
@@ -170,7 +171,7 @@ def api_register():
             SELECT COALESCE(MAX(user_id), 0) + 1, %s, %s, %s
             FROM `USER`
             """,
-            (3, name, password),
+            (3, name, generate_password_hash(password)),
         )
     except Exception as exc:
         return jsonify({"success": False, "message": f"회원가입 중 오류가 발생했습니다: {exc}"}), 500
