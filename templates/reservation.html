@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}예약하기{% endblock %}
+{% block content %}
+<div class="dashboard-layout">
+    <div class="dashboard-content">
+        <section class="page-heading">
+            <h1>방 예약</h1>
+            <p>사용할 방과 시간을 선택하면 예약 현황에 바로 반영됩니다.</p>
+        </section>
+
+        <section class="grid two">
+            <article class="card">
+                <h2>새 예약</h2>
+                <form id="reservationForm" class="auth-form">
+                    <select id="room_id" required>
+                        <option value="">방 선택</option>
+                        {% for room in rooms %}
+                        <option value="{{ room.room_id }}">{{ room.room_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="datetime-local" id="start_time" required>
+                    <input type="datetime-local" id="end_time" required>
+                    <input type="text" id="purpose" placeholder="목적">
+                    <button type="submit">예약하기</button>
+                </form>
+                <p id="reservationMessage" class="auth-link"></p>
+            </article>
+
+            <article class="card">
+                <h2>예약 현황</h2>
+                {% for row in reservations %}
+                <p>{{ row.room_name }} · {{ row.user_name }} <strong>{{ row.reservation_status_label }}</strong></p>
+                <p>{{ row.start_time }} - {{ row.end_time }} <strong>{{ row.purpose or "목적 없음" }}</strong></p>
+                {% else %}
+                <p>등록된 예약이 없습니다.</p>
+                {% endfor %}
+            </article>
+        </section>
+    </div>
+
+    <aside class="side-panel" aria-label="빠른 이동">
+        <h2>바로가기</h2>
+        <div class="side-actions">
+            <a href="{{ url_for('dashboard') }}">대시보드</a>
+            <a href="{{ request.path }}">새로고침</a>
+            <a href="{{ url_for('logout') }}">로그아웃</a>
+        </div>
+    </aside>
+</div>
+
+<script>
+document.getElementById('reservationForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const response = await fetch('/api/reservations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      room_id: document.getElementById('room_id').value,
+      start_time: document.getElementById('start_time').value,
+      end_time: document.getElementById('end_time').value,
+      purpose: document.getElementById('purpose').value
+    })
+  });
+
+  const result = await response.json();
+  const message = document.getElementById('reservationMessage');
+  message.textContent = result.message;
+
+  if (result.success) {
+    window.location.href = '/dashboard';
+  }
+});
+</script>
+{% endblock %}

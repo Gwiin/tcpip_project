@@ -1,16 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}회원가입{% endblock %}
+{% block title %}멤버등록{% endblock %}
 {% block content %}
 <section class="auth-shell">
     <div class="auth-card">
         <div class="auth-brand">
             <span class="brand-mark">HM</span>
-            <h1>회원가입</h1>
+            <h1>멤버등록</h1>
         </div>
         <form id="registerForm" class="auth-form">
             <input type="text" id="user_id" placeholder="이름(로그인 ID)" required>
             <input type="password" id="password" placeholder="비밀번호" required>
-            <button type="submit">가입 완료</button>
+            <button type="submit">등록 완료</button>
         </form>
         <p class="auth-link">이미 계정이 있나요? <a href="/">로그인</a></p>
     </div>
@@ -34,7 +34,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     if (response.ok && result.success) {
         window.location.href = '/';
     } else {
-        alert(result.message || '회원가입 실패');
+        alert(result.message || '멤버등록 실패');
     }
 });
 </script>

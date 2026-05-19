@@ -122,10 +122,10 @@ DB와 Flask 설정은 프로젝트 루트의 `.env` 파일에 작성합니다.
 ```text
 MYSQL_HOST=127.0.0.1
 MYSQL_USER=root
-MYSQL_PASSWORD=1234
+MYSQL_PASSWORD=replace-with-db-password
 MYSQL_DB=Home_Manager
 MYSQL_PORT=3306
-FLASK_SECRET_KEY=change-me
+FLASK_SECRET_KEY=replace-with-a-random-secret
 ```
 
 ## 3. DB 연결 확인

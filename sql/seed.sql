@@ -18,11 +18,11 @@ INSERT IGNORE INTO USER_ROLE (role_id, role_name) VALUES
 
 -- 3. 사용자 기본 데이터
 -- 사용자와 권한의 관계를 예시로 보여주기 위한 초기 데이터다.
-INSERT IGNORE INTO `USER` (user_id, role_id, pw, user_name) VALUES
-(1, 1, 'father123', '아버지'),
-(2, 2, 'mother123', '어머니'),
-(3, 2, 'me123', '나'),
-(4, 3, 'guest123', '손님');
+-- INSERT IGNORE INTO `USER` (user_id, role_id, pw, user_name) VALUES
+-- (1, 1, 'father123', '아버지'),
+-- (2, 2, 'mother123', '어머니'),
+-- (3, 2, 'me123', '나'),
+-- (4, 3, 'guest123', '손님');
 
 -- 4. 센서 종류
 -- 실제 센서 데이터가 어떤 단위를 가지는지 정의한다.

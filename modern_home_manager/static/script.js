@@ -58,11 +58,12 @@ async function fetchJson(url, options) {
 }
 
 function sparkline(points) {
-    const max = Math.max(...points);
-    const min = Math.min(...points);
+    const safePoints = points.length > 1 ? points : [points[0] || 0, points[0] || 0];
+    const max = Math.max(...safePoints);
+    const min = Math.min(...safePoints);
     const spread = max - min || 1;
-    const coordinates = points.map((point, index) => {
-        const x = (index / (points.length - 1)) * 72;
+    const coordinates = safePoints.map((point, index) => {
+        const x = (index / (safePoints.length - 1)) * 72;
         const y = 22 - ((point - min) / spread) * 18;
         return `${index === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
     });
@@ -102,12 +103,12 @@ function renderSensors(sensors, rooms) {
 }
 
 function renderTemperatureChart(temperatures) {
-    const maxValue = Math.max(...temperatures.map((item) => item.value));
+    const maxValue = Math.max(...temperatures.map((item) => item.value), 1);
     elements.temperatureChart.innerHTML = temperatures.map((item) => {
         const height = Math.round((item.value / maxValue) * 150);
         return `
             <div class="bar-item">
-                <span class="bar-value">${item.value.toFixed(1)}°C</span>
+                <span class="bar-value">${item.value.toFixed(1)}C</span>
                 <span class="bar ${item.color}" style="height: ${height}px"></span>
                 <span class="bar-label">${escapeHtml(item.room)}</span>
             </div>
@@ -163,9 +164,9 @@ function renderLogs(logs) {
 }
 
 function metricIcon(label) {
-    if (label === "temperature") return "♨";
-    if (label === "humidity") return "◌";
-    return "☼";
+    if (label === "temperature") return "T";
+    if (label === "humidity") return "%";
+    return "L";
 }
 
 function renderRooms(rooms) {
@@ -176,17 +177,17 @@ function renderRooms(rooms) {
                 <div>
                     <div class="room-card-top">
                         <h3>${escapeHtml(room.name)}</h3>
-                        <span class="room-status">● ${escapeHtml(room.status)}</span>
+                        <span class="room-status">${escapeHtml(room.status)}</span>
                     </div>
                     <div class="room-metrics">
-                        <span>${metricIcon("temperature")} ${room.temperature.toFixed(1)}°C</span>
+                        <span>${metricIcon("temperature")} ${room.temperature.toFixed(1)}C</span>
                         <span>${metricIcon("humidity")} ${room.humidity}%</span>
                         <span>${metricIcon("light")} ${room.light} lux</span>
                     </div>
                 </div>
                 <div class="room-card-bottom">
                     <span>장치 ${room.devices_on}개 켜짐</span>
-                    <span>›</span>
+                    <span>보기</span>
                 </div>
             </div>
         </article>
@@ -264,7 +265,7 @@ function requestBrowserLocation() {
                 console.error(error);
             } finally {
                 elements.locationButton.disabled = false;
-                elements.locationButton.innerHTML = "내 위치 확인 <span>→</span>";
+                elements.locationButton.innerHTML = "현재 위치 확인 <span>→</span>";
             }
         },
         (error) => {
@@ -272,7 +273,7 @@ function requestBrowserLocation() {
                 ? "위치 권한이 거부되었습니다."
                 : "현재 위치를 확인할 수 없습니다.";
             elements.locationButton.disabled = false;
-            elements.locationButton.innerHTML = "내 위치 확인 <span>→</span>";
+            elements.locationButton.innerHTML = "현재 위치 확인 <span>→</span>";
         },
         {enableHighAccuracy: true, timeout: 8000, maximumAge: 30000}
     );

@@ -87,14 +87,14 @@
         .auth-form, .toggle-list, .side-actions { display: grid; gap: 8px; }
         .auth-form { gap: 12px; }
 
-        input, button { width: 100%; border-radius: var(--radius); font: inherit; }
+        input, select, button { width: 100%; border-radius: var(--radius); font: inherit; }
 
-        input {
+        input, select {
           border: 1px solid var(--line); background: #fbfdff;
           color: var(--text); padding: 12px 13px;
         }
 
-        input:focus {
+        input:focus, select:focus {
           border-color: var(--primary);
           box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
           outline: none;
@@ -190,13 +190,14 @@
                 <span class="brand-mark">HM</span>
                 <span>
                     <strong>Home Manager</strong>
-                    <small>TCP/IP 스마트홈 대시보드</small>
+                    <small>Flask-Mysql-Tcp/ip Project</small>
                 </span>
             </a>
             <div class="room-nav" aria-label="방 바로가기">
                 <a href="{{ url_for('room_detail', room_id=1) }}">거실</a>
                 <a href="{{ url_for('room_detail', room_id=2) }}">침실</a>
                 <a href="{{ url_for('room_detail', room_id=3) }}">주방</a>
+                <a href="{{ url_for('reservation_page') }}">예약</a>
             </div>
             <a class="refresh-link" href="{{ request.path }}">새로고침</a>
         </nav>

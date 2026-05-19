@@ -15,7 +15,7 @@
             </article>
             <article class="card">
                 <h2>현재 방 상태</h2>
-                {% for row in room_statuses %}<p>{{ row.room_name }} <strong>{{ row.status_name }}</strong></p>{% endfor %}
+                {% for row in room_statuses %}<p>{{ row.room_name }} <strong>{{ row.status_label }}</strong></p>{% endfor %}
             </article>
             <article class="card">
                 <h2>현재 사용자 위치</h2>
@@ -52,8 +52,9 @@
             <article class="card">
                 <h2>예약 현황</h2>
                 {% for row in reservations %}
-                <p>{{ row.room_name }} · {{ row.user_name }} · {{ row.reservation_status }}</p>
+                <p>{{ row.room_name }} · {{ row.user_name }} <strong>{{ row.reservation_status_label }}</strong></p>
                 {% endfor %}
+                <p><a href="{{ url_for('reservation_page') }}">예약하기</a></p>
             </article>
         </section>
 
@@ -82,6 +83,7 @@
         </div>
         <div class="side-actions">
             <a href="{{ url_for('dashboard') }}">대시보드</a>
+            <a href="{{ url_for('reservation_page') }}">예약하기</a>
             <a href="{{ request.path }}">새로고침</a>
             <a href="{{ url_for('logout') }}">로그아웃</a>
         </div>

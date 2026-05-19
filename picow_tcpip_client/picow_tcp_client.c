@@ -43,7 +43,7 @@ static const char* random_ac_state(void) {
 }
 
 static const char* random_curtain_state(void) {
-    return random_bool() ? "OPEN" : "CLOSE";
+    return random_bool() ? "OPEN" : "CLOSED";
 }
 
 static void build_payload(char *payload, size_t size) {

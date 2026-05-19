@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Home Manager | TCP/IP 스마트홈 대시보드</title>
+    <title>Home Manager | Modern Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -14,11 +14,11 @@
         <aside class="sidebar liquid-panel">
             <a class="brand" href="{{ url_for('dashboard') }}" aria-label="Home Manager">
                 <svg class="brand-icon" viewBox="0 0 48 48" aria-hidden="true">
-                    <path d="M8 24L24 10l16 14v16a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V24Z"/>
-                    <path d="M18 42V29h12v13M33 12v6M36 9v5M39 6v6"/>
+                    <path d="M8 24L24 10l16 14v16a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V24Z"></path>
+                    <path d="M18 42V29h12v13M33 12v6M36 9v5M39 6v6"></path>
                 </svg>
                 <strong>Home Manager</strong>
-                <span>TCP/IP 스마트홈 대시보드</span>
+                <span>SQLite 기반 스마트홈 대시보드</span>
             </a>
 
             <nav class="side-nav" aria-label="주요 메뉴">
@@ -44,9 +44,9 @@
                 <span class="status-dot"></span>
                 <small>시스템 상태</small>
                 <strong>정상</strong>
-                <p>모든 시스템이 정상적으로 작동 중입니다.</p>
+                <p>새 SQLite DB와 시뮬레이터가 대시보드 데이터를 공급합니다.</p>
                 <svg class="mini-wave" viewBox="0 0 120 36" aria-hidden="true">
-                    <path d="M2 24C10 8 16 28 23 18s12 4 18 0 10-16 17-4 14 18 20 2 11-10 18-2 12 8 22-4"/>
+                    <path d="M2 24C10 8 16 28 23 18s12 4 18 0 10-16 17-4 14 18 20 2 11-10 18-2 12 8 22-4"></path>
                 </svg>
                 <button class="settings-button" type="button">설정</button>
             </section>
@@ -56,13 +56,13 @@
             <section class="status-bar liquid-panel" aria-label="상단 상태">
                 <div class="status-item live">
                     <span class="icon-broadcast" aria-hidden="true"></span>
-                    <div><small>LIVE</small><strong id="connection-status">실시간 연결됨</strong></div>
+                    <div><small>LIVE</small><strong id="connection-status">연결 확인 중</strong></div>
                     <span class="live-dot"></span>
                 </div>
-                <div class="status-item"><span class="icon-shield" aria-hidden="true"></span><div><small>보안</small><strong id="security-status">해제</strong></div></div>
-                <div class="status-item"><span class="icon-thermo" aria-hidden="true"></span><div><small>실내 평균</small><strong id="avg-temp">22.6°C</strong></div></div>
-                <div class="status-item"><span class="icon-drop" aria-hidden="true"></span><div><small>실내 습도</small><strong id="avg-humidity">48%</strong></div></div>
-                <div class="status-item"><span class="icon-clock" aria-hidden="true"></span><div><small>현재 시간</small><strong id="current-time">2025-05-20 10:24:15</strong></div></div>
+                <div class="status-item"><span class="icon-shield" aria-hidden="true"></span><div><small>보안</small><strong id="security-status">-</strong></div></div>
+                <div class="status-item"><span class="icon-thermo" aria-hidden="true"></span><div><small>실내 평균</small><strong id="avg-temp">-</strong></div></div>
+                <div class="status-item"><span class="icon-drop" aria-hidden="true"></span><div><small>실내 습도</small><strong id="avg-humidity">-</strong></div></div>
+                <div class="status-item"><span class="icon-clock" aria-hidden="true"></span><div><small>현재 시간</small><strong id="current-time">-</strong></div></div>
                 <button class="icon-button notice" type="button" aria-label="알림"><span class="icon-bell"></span><b>2</b></button>
                 <button class="profile-button" type="button"><span class="avatar-icon"></span><span>관리자<br><small>admin</small></span><span class="chevron"></span></button>
             </section>
@@ -72,7 +72,7 @@
                     <header class="page-heading">
                         <div>
                             <h1>스마트홈 대시보드</h1>
-                            <p>TCP/IP 기반 스마트홈 시스템의 실시간 상태를 한눈에 확인하세요.</p>
+                            <p>새로운 SQLite DB, Flask API, 시뮬레이터로 실시간처럼 변하는 홈 상태를 확인합니다.</p>
                         </div>
                         <button class="edit-button" type="button"><span class="icon-sliders"></span>대시보드 편집</button>
                     </header>
@@ -90,16 +90,16 @@
                         <article class="card liquid-card chart-card">
                             <header class="card-header">
                                 <h2>방별 평균 온도</h2>
-                                <span>°C</span>
+                                <span>C</span>
                             </header>
                             <div class="bar-chart" id="temperature-chart"></div>
-                            <p class="chart-average">전체 평균 <strong id="chart-average">22.6°C</strong></p>
+                            <p class="chart-average">전체 평균 <strong id="chart-average">-</strong></p>
                         </article>
 
                         <article class="card liquid-card actuator-card">
-                            <header class="card-header"><h2>현재 동작 중인 액추에이터</h2></header>
+                            <header class="card-header"><h2>현재 동작 중인 장치</h2></header>
                             <div class="actuator-list" id="actuator-list"></div>
-                            <button class="text-action" type="button">액추에이터 더보기 <span>→</span></button>
+                            <button class="text-action" type="button">장치 더보기 <span>→</span></button>
                         </article>
 
                         <article class="card liquid-card schedule-card">
@@ -115,13 +115,13 @@
                             </div>
                             <div class="location-row">
                                 <span class="icon-user"></span>
-                                <strong id="location-user">관리자 (나)</strong>
+                                <strong id="location-user">관리자</strong>
                                 <span class="home-marker">집</span>
-                                <time id="location-time">10:24</time>
+                                <time id="location-time">-</time>
                             </div>
-                            <p class="updated-text">마지막 업데이트: <span id="location-updated">10:24:05</span></p>
-                            <p class="location-note" id="location-note">브라우저 위치 권한을 허용하면 현재 좌표를 확인할 수 있습니다.</p>
-                            <button class="text-action location-action" id="location-button" type="button">내 위치 확인 <span>→</span></button>
+                            <p class="updated-text">마지막 업데이트: <span id="location-updated">-</span></p>
+                            <p class="location-note" id="location-note">브라우저 위치 권한을 허용하면 현재 좌표를 저장합니다.</p>
+                            <button class="text-action location-action" id="location-button" type="button">현재 위치 확인 <span>→</span></button>
                         </article>
 
                         <article class="card liquid-card log-card">
@@ -143,9 +143,9 @@
 
             <footer class="connection-footer liquid-panel">
                 <span class="icon-broadcast"></span>
-                <strong>TCP/IP 연결 상태: 정상</strong>
-                <span>게이트웨이: <b id="gateway-ip">192.168.1.10</b></span>
-                <span>펌웨어: <b id="firmware-version">v1.2.3</b></span>
+                <strong>DB 연결 상태: 정상</strong>
+                <span>게이트웨이 <b id="gateway-ip">-</b></span>
+                <span>펌웨어 <b id="firmware-version">-</b></span>
             </footer>
         </main>
     </div>

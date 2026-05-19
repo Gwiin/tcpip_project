@@ -10,15 +10,19 @@
 """
 
 import json
+import os
 import random
 import socket
 import threading
 import time
 
+from config import env_int, load_env
 
-HOST = "127.0.0.1"
-PORT = 4242
-SEND_INTERVAL_SECONDS = 5
+
+load_env()
+HOST = os.getenv("SIMULATOR_TCP_HOST", "127.0.0.1")
+PORT = env_int("SIMULATOR_TCP_PORT", 4242)
+SEND_INTERVAL_SECONDS = env_int("SIMULATOR_SEND_INTERVAL_SECONDS", 5)
 
 
 def send_loop(device_id, builder):
@@ -46,7 +50,7 @@ def living_room_payload():
         "actuators": {
             "light": random.choice(["ON", "OFF"]),
             "air_conditioner": random.choice(["OFF", "COOLING", "HEATING"]),
-            "curtain": random.choice(["OPEN", "CLOSE"]),
+            "curtain": random.choice(["OPEN", "CLOSED"]),
         },
     }
 

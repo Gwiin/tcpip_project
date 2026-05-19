@@ -3,3 +3,5 @@
 __pycache__/
 *.py[cod]
 plan.md
+modern_home_manager/*.db
+modern_home_manager/.tmp/
