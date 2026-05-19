@@ -1,14 +1,14 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
-from db import fetch_all, execute
+from db import execute, fetch_all
 
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY")
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me")
 app.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST")
 app.config["MYSQL_USER"] = os.getenv("MYSQL_USER")
 app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD")
@@ -102,57 +102,83 @@ ORDER BY asl.changed_time DESC, asl.actuator_state_id DESC
 LIMIT 10
 """
 
+
+@app.route("/")
+def home():
+    return render_template("login.html")
+
+
 @app.route("/login_page")
 def login_page():
     return render_template("login.html")
+
 
 @app.route("/register_page")
 def register_page():
     return render_template("register.html")
 
+
 @app.route("/api/login", methods=["POST"])
 def api_login():
-    data = request.get_json()
-    name = data.get("name")
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
     password = data.get("password")
-    
+
+    if not name or not password:
+        return jsonify({"success": False, "message": "사용자명과 비밀번호를 입력해주세요."}), 400
+
     user = fetch_all(
-        "SELECT user_id, user_name FROM `USER` WHERE user_name = %s AND password = %s",
-        (name, password)
+        "SELECT user_id, user_name FROM `USER` WHERE user_name = %s AND pw = %s",
+        (name, password),
     )
-    
-    if user:
-        return jsonify({"success": True, "message": "로그인 성공", "user_id": user[0]["user_id"]})
-    else:
-        return jsonify({"success": False, "message": "사용자명 또는 비밀번호가 잘못되었습니다."}), 401
+
+    if not user:
+        return jsonify({"success": False, "message": "사용자명 또는 비밀번호가 올바르지 않습니다."}), 401
+
+    session["user_id"] = user[0]["user_id"]
+    session["user_name"] = user[0]["user_name"]
+    return jsonify({"success": True, "message": "로그인 성공", "user_id": user[0]["user_id"]})
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("home"))
+
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
-    data = request.get_json()
-    name = data.get("name")
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
     password = data.get("password")
-    
+
     if not name or not password:
         return jsonify({"success": False, "message": "사용자명과 비밀번호를 입력해주세요."}), 400
-    
+
     existing_user = fetch_all(
         "SELECT user_id FROM `USER` WHERE user_name = %s",
-        (name,)
+        (name,),
     )
-    
+
     if existing_user:
         return jsonify({"success": False, "message": "이미 존재하는 사용자명입니다."}), 409
-    
+
     try:
         execute(
-            "INSERT INTO `USER` (user_name, password) VALUES (%s, %s)",
-            (name, password)
+            """
+            INSERT INTO `USER` (user_id, role_id, user_name, pw)
+            SELECT COALESCE(MAX(user_id), 0) + 1, %s, %s, %s
+            FROM `USER`
+            """,
+            (3, name, password),
         )
-        return jsonify({"success": True, "message": "회원가입이 완료되었습니다."})
-    except Exception as e:
-        return jsonify({"success": False, "message": f"회원가입 중 오류가 발생했습니다: {str(e)}"}), 500
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"회원가입 중 오류가 발생했습니다: {exc}"}), 500
 
-@app.route("/")
+    return jsonify({"success": True, "message": "회원가입이 완료되었습니다."})
+
+
+@app.route("/dashboard")
 def dashboard():
     return render_template(
         "index.html",
@@ -165,6 +191,7 @@ def dashboard():
         recent_readings=fetch_all(RECENT_READING_SQL),
         recent_actuators=fetch_all(RECENT_ACTUATOR_SQL),
     )
+
 
 @app.route("/room/<int:room_id>")
 def room_detail(room_id):
@@ -199,6 +226,7 @@ def room_detail(room_id):
     )
     return render_template("room.html", room=room[0], sensors=sensors, actuators=actuators)
 
+
 @app.route("/api/room/<int:room_id>/temperature-history")
 def temperature_history(room_id):
     rows = fetch_all(
@@ -215,6 +243,7 @@ def temperature_history(room_id):
     )
     rows.reverse()
     return jsonify(rows)
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
