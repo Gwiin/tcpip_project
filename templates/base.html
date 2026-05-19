@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Home Manager{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    {% if session.get('user_id') %}
+    <nav>
+        <a href="{{ url_for('dashboard') }}">대시보드</a>
+        <a href="{{ url_for('room_detail', room_id=1) }}">거실</a>
+        <a href="{{ url_for('room_detail', room_id=2) }}">침실</a>
+        <a href="{{ url_for('room_detail', room_id=3) }}">주방</a>
+        <a href="{{ url_for('logout') }}" class="logout">로그아웃</a>
+    </nav>
+    <div class="welcome-msg">
+        <strong>{{ session.get('user_name') }}</strong>님 환영합니다.
+    </div>
+    {% endif %}
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
