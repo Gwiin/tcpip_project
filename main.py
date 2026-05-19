@@ -203,15 +203,15 @@ def api_register():
     if not name or not password:
         return jsonify({"success": False, "message": "사용자명과 비밀번호를 입력해주세요."}), 400
 
-    existing_user = fetch_all(
-        "SELECT user_id FROM `USER` WHERE user_name = %s",
-        (name,),
-    )
-
-    if existing_user:
-        return jsonify({"success": False, "message": "이미 존재하는 사용자명입니다."}), 409
-
     try:
+        existing_user = fetch_all(
+            "SELECT user_id FROM `USER` WHERE user_name = %s",
+            (name,),
+        )
+
+        if existing_user:
+            return jsonify({"success": False, "message": "이미 존재하는 사용자명입니다."}), 409
+
         execute(
             """
             INSERT INTO `USER` (user_id, role_id, user_name, pw)
