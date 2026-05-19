@@ -6,7 +6,7 @@ load_dotenv()
 DB_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "163.152.213.111"),
     "port": int(os.getenv("MYSQL_PORT", "3306")),
-    "user": os.getenv("MYSQL_USER", "root"),
+    "user": os.getenv("MYSQL_USER", "test"),
     "password": os.getenv("MYSQL_PASSWORD", ""),
     "database": os.getenv("MYSQL_DB", "Home_Manager"),
 }
