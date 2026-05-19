@@ -1,7 +1,18 @@
-from flask import Flask, jsonify, render_template
-from db import fetch_all
+import os
+
+from dotenv import load_dotenv
+from flask import Flask, jsonify, render_template, request
+
+from db import fetch_all, execute
+
+load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY")
+app.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST")
+app.config["MYSQL_USER"] = os.getenv("MYSQL_USER")
+app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD")
+app.config["MYSQL_DB"] = os.getenv("MYSQL_DB")
 
 LATEST_SENSOR_SQL = """
 SELECT r.room_id, r.room_name, s.sensor_name, st.type_name, sr.measured_value, st.unit, sr.measured_time
@@ -90,6 +101,56 @@ JOIN ROOM r ON a.room_id = r.room_id
 ORDER BY asl.changed_time DESC, asl.actuator_state_id DESC
 LIMIT 10
 """
+
+@app.route("/login_page")
+def login_page():
+    return render_template("login.html")
+
+@app.route("/register_page")
+def register_page():
+    return render_template("register.html")
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    data = request.get_json()
+    name = data.get("name")
+    password = data.get("password")
+    
+    user = fetch_all(
+        "SELECT user_id, user_name FROM `USER` WHERE user_name = %s AND password = %s",
+        (name, password)
+    )
+    
+    if user:
+        return jsonify({"success": True, "message": "로그인 성공", "user_id": user[0]["user_id"]})
+    else:
+        return jsonify({"success": False, "message": "사용자명 또는 비밀번호가 잘못되었습니다."}), 401
+
+@app.route("/api/register", methods=["POST"])
+def api_register():
+    data = request.get_json()
+    name = data.get("name")
+    password = data.get("password")
+    
+    if not name or not password:
+        return jsonify({"success": False, "message": "사용자명과 비밀번호를 입력해주세요."}), 400
+    
+    existing_user = fetch_all(
+        "SELECT user_id FROM `USER` WHERE user_name = %s",
+        (name,)
+    )
+    
+    if existing_user:
+        return jsonify({"success": False, "message": "이미 존재하는 사용자명입니다."}), 409
+    
+    try:
+        execute(
+            "INSERT INTO `USER` (user_name, password) VALUES (%s, %s)",
+            (name, password)
+        )
+        return jsonify({"success": True, "message": "회원가입이 완료되었습니다."})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"회원가입 중 오류가 발생했습니다: {str(e)}"}), 500
 
 @app.route("/")
 def dashboard():
