@@ -24,11 +24,12 @@ CREATE TABLE IF NOT EXISTS USER_ROLE(
 );
 
 -- 3. USER
--- 시스템 사용자를 저장한다.
+-- 시스템 사용자를 저장한다. 패스워드를 추가 한다.
 -- 각 사용자는 하나의 권한을 가진다.
 CREATE TABLE IF NOT EXISTS `USER`(
     user_id INT PRIMARY KEY,
     role_id INT,
+    pw VARCHAR(255) NOT NULL,
     user_name VARCHAR(40) NOT NULL,
     FOREIGN KEY (role_id) REFERENCES USER_ROLE(role_id)
 );

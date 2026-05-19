@@ -18,6 +18,13 @@ def fetch_all(query, params=None):
         cursor.close()
         return rows
 
+def execute(query, params=None):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, params or ())
+        conn.commit()
+        cursor.close()
+
 def execute_many(statements):
     with get_connection() as conn:
         cursor = conn.cursor()
