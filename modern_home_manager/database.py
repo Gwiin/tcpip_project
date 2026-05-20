@@ -4,6 +4,7 @@ import os
 import hmac
 from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Iterator
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -16,6 +17,8 @@ DB_ENV_DEFAULTS = {
     "MYSQL_PASSWORD": "",
     "MYSQL_DB": "Home_Manager",
 }
+
+PACKAGE_DIR = Path(__file__).resolve().parent
 
 ROOM_META = {
     1: {"id": "living", "image": "images/living-room-photo.png", "color": "teal"},
@@ -63,10 +66,11 @@ def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def load_env_file(path: str = ".env") -> None:
-    if not os.path.exists(path):
+def load_env_file(path: str | Path | None = None) -> None:
+    env_path = Path(path) if path is not None else PACKAGE_DIR / ".env"
+    if not env_path.exists():
         return
-    with open(path, encoding="utf-8") as env_file:
+    with env_path.open(encoding="utf-8") as env_file:
         for line in env_file:
             stripped = line.strip()
             if not stripped or stripped.startswith("#") or "=" not in stripped:
@@ -165,6 +169,14 @@ def format_time(value: Any) -> str:
     if isinstance(value, datetime):
         return value.strftime("%H:%M:%S")
     return datetime.fromisoformat(str(value)).strftime("%H:%M:%S")
+
+
+def format_datetime(value: Any) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M")
+    return datetime.fromisoformat(str(value)).strftime("%Y-%m-%d %H:%M")
 
 
 def format_sensor_value(sensor_type: str, value: float, unit: str) -> str:
@@ -271,6 +283,7 @@ def fetch_rooms() -> list[dict[str, Any]]:
         latest = latest_sensor_values(row["room_id"])
         rooms.append(
             {
+                "raw_id": row["room_id"],
                 "id": meta["id"],
                 "name": row["room_name"],
                 "status": labels.get(status_rows.get(row["room_id"], "EMPTY"), "정상"),
@@ -347,25 +360,29 @@ def fetch_reservations() -> list[dict[str, str]]:
         {
             "time": format_time(row["start_time"]),
             "title": f"{row['room_name']} {row['purpose'] or '예약'}",
-            "repeat": f"~ {format_time(row['end_time'])}",
+            "repeat": f"{format_datetime(row['start_time'])} ~ {format_datetime(row['end_time'])}",
             "status": labels.get(row["reservation_status"], row["reservation_status"]),
         }
         for row in rows
     ]
 
 
-def fetch_location() -> dict[str, Any]:
+def fetch_location(user_id: int | None = None) -> dict[str, Any]:
+    where = "WHERE u.user_id = %s" if user_id is not None else ""
+    params = (user_id,) if user_id is not None else ()
     rows = fetch_all(
-        """
+        f"""
         SELECT u.user_name, COALESCE(r.room_name, '위치 없음') AS place_label,
                m.source, m.accuracy, m.latitude, m.longitude, m.note, m.updated_at
         FROM `USER` u
         LEFT JOIN USER_LOCATION ul ON u.user_id = ul.user_id
         LEFT JOIN ROOM r ON ul.room_id = r.room_id
         LEFT JOIN MODERN_BROWSER_LOCATION m ON m.user_id = u.user_id
+        {where}
         ORDER BY u.user_id
         LIMIT 1
-        """
+        """,
+        params,
     )
     if not rows:
         return {"user": "관리자", "place": "집", "time": "-", "updated": "-", "source": "none", "accuracy": None, "latitude": None, "longitude": None, "note": "사용자 데이터가 없습니다."}
@@ -439,7 +456,7 @@ def fetch_status(rooms: list[dict[str, Any]], actuators: list[dict[str, Any]]) -
     }
 
 
-def build_dashboard_payload() -> dict[str, Any]:
+def build_dashboard_payload(user_id: int | None = None) -> dict[str, Any]:
     rooms = fetch_rooms()
     sensors = fetch_latest_sensors()
     actuators = fetch_actuators()
@@ -449,17 +466,17 @@ def build_dashboard_payload() -> dict[str, Any]:
         "temperatures": [{"room": room["name"], "value": room["temperature"], "color": room["color"]} for room in rooms],
         "actuators": actuators,
         "reservations": fetch_reservations(),
-        "location": fetch_location(),
+        "location": fetch_location(user_id),
         "logs": fetch_logs(),
         "rooms": rooms,
     }
 
 
-def room_payload(room_id: str) -> dict[str, Any] | None:
+def room_payload(room_id: str, user_id: int | None = None) -> dict[str, Any] | None:
     int_id = room_int_id(room_id)
     if int_id is None:
         return None
-    payload = build_dashboard_payload()
+    payload = build_dashboard_payload(user_id)
     room = next((item for item in payload["rooms"] if item["id"] == room_id), None)
     if room is None:
         return None
@@ -470,12 +487,12 @@ def room_payload(room_id: str) -> dict[str, Any] | None:
     }
 
 
-def update_location(latitude: float, longitude: float, accuracy: float | None) -> dict[str, Any]:
+def update_location(user_id: int, latitude: float, longitude: float, accuracy: float | None) -> dict[str, Any]:
     execute(
         """
         INSERT INTO MODERN_BROWSER_LOCATION
             (user_id, source, latitude, longitude, accuracy, note, updated_at)
-        VALUES (1, 'browser_geolocation', %s, %s, %s, '브라우저 위치 권한으로 받은 좌표를 저장했습니다.', NOW())
+        VALUES (%s, 'browser_geolocation', %s, %s, %s, '브라우저 위치 권한으로 받은 좌표를 저장했습니다.', NOW())
         ON DUPLICATE KEY UPDATE
             source = VALUES(source),
             latitude = VALUES(latitude),
@@ -484,9 +501,44 @@ def update_location(latitude: float, longitude: float, accuracy: float | None) -
             note = VALUES(note),
             updated_at = VALUES(updated_at)
         """,
-        (round(latitude, 6), round(longitude, 6), round(accuracy, 1) if accuracy is not None else None),
+        (user_id, round(latitude, 6), round(longitude, 6), round(accuracy, 1) if accuracy is not None else None),
     )
-    return fetch_location()
+    return fetch_location(user_id)
+
+
+def parse_reservation_datetime(value: Any) -> str:
+    try:
+        return datetime.fromisoformat(str(value)).strftime("%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("예약 시간 형식이 올바르지 않습니다.") from exc
+
+
+def create_reservation(user_id: int, room_id: Any, start_time: Any, end_time: Any, purpose: Any) -> dict[str, Any]:
+    try:
+        room_int = int(room_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("방을 선택해주세요.") from exc
+
+    start_at = parse_reservation_datetime(start_time)
+    end_at = parse_reservation_datetime(end_time)
+    if start_at >= end_at:
+        raise ValueError("종료 시간은 시작 시간보다 늦어야 합니다.")
+
+    rooms = fetch_all("SELECT room_id FROM ROOM WHERE room_id = %s", (room_int,))
+    if not rooms:
+        raise ValueError("존재하지 않는 방입니다.")
+
+    execute(
+        """
+        INSERT INTO ROOM_RESERVATION
+            (reservation_id, user_id, room_id, start_time, end_time, purpose, reservation_status)
+        SELECT COALESCE(MAX(reservation_id), 0) + 1, %s, %s, %s, %s, %s, 'RESERVED'
+        FROM ROOM_RESERVATION
+        """,
+        (user_id, room_int, start_at, end_at, (str(purpose).strip() if purpose else None)),
+    )
+
+    return {"success": True, "message": "예약이 완료되었습니다."}
 
 
 def authenticate_user(name: str, password: str) -> dict[str, Any] | None:

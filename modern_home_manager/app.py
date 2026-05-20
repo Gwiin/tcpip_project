@@ -10,6 +10,7 @@ try:
         DatabaseUnavailable,
         authenticate_user,
         build_dashboard_payload,
+        create_reservation,
         create_user_account,
         initialize_database,
         record_device_frame,
@@ -22,6 +23,7 @@ except ModuleNotFoundError:
         DatabaseUnavailable,
         authenticate_user,
         build_dashboard_payload,
+        create_reservation,
         create_user_account,
         initialize_database,
         record_device_frame,
@@ -114,11 +116,11 @@ def create_app() -> Flask:
 
     @app.get("/api/dashboard")
     def dashboard_api():
-        return jsonify(build_dashboard_payload())
+        return jsonify(build_dashboard_payload(session.get("user_id")))
 
     @app.get("/api/rooms/<room_id>")
     def room_api(room_id: str):
-        payload = room_payload(room_id)
+        payload = room_payload(room_id, session.get("user_id"))
         if payload is None:
             abort(404, description=f"Unknown room: {room_id}")
         return jsonify(payload)
@@ -138,11 +140,33 @@ def create_app() -> Flask:
 
         return jsonify(
             update_location(
+                user_id=int(session["user_id"]),
                 latitude=float(latitude),
                 longitude=float(longitude),
                 accuracy=float(accuracy) if accuracy is not None else None,
             )
         )
+
+    @app.post("/api/reservations")
+    def create_reservation_api():
+        require_login()
+        payload = request.get_json(silent=True) or {}
+        required_fields = ("room_id", "start_time", "end_time")
+        if any(not payload.get(field) for field in required_fields):
+            abort(400, description="방, 시작 시간, 종료 시간을 입력해주세요.")
+
+        try:
+            result = create_reservation(
+                user_id=int(session["user_id"]),
+                room_id=payload.get("room_id"),
+                start_time=payload.get("start_time"),
+                end_time=payload.get("end_time"),
+                purpose=payload.get("purpose"),
+            )
+        except ValueError as exc:
+            abort(400, description=str(exc))
+
+        return jsonify(result), 201
 
     @app.post("/api/actuators/<actuator_id>/toggle")
     def toggle_actuator_api(actuator_id: str):

@@ -14,12 +14,12 @@ DASHBOARD_PAYLOAD = {
         "gateway": "127.0.0.1:3306",
         "firmware": "modern-mysql-v1",
     },
-    "rooms": [{"id": "living", "name": "거실", "temperature": 23.0, "humidity": 45, "light": 300, "devices_on": 1, "spark": [22, 23], "image": "images/living-room-photo.png", "status": "사용중", "color": "teal"}],
+    "rooms": [{"raw_id": 1, "id": "living", "name": "거실", "temperature": 23.0, "humidity": 45, "light": 300, "devices_on": 1, "spark": [22, 23], "image": "images/living-room-photo.png", "status": "사용중", "color": "teal"}],
     "sensors": [],
     "temperatures": [],
     "actuators": [{"id": "actuator-1", "room": "living", "icon": "light", "name": "거실 조명", "detail": "OFF", "active": False}],
     "reservations": [],
-    "location": {"user": "관리자", "time": "-", "updated": "-", "source": "mysql", "accuracy": None, "note": ""},
+    "location": {"user": "관리자", "time": "-", "updated": "-", "source": "mysql", "accuracy": None, "latitude": None, "longitude": None, "note": ""},
     "logs": [],
 }
 
@@ -96,6 +96,48 @@ class ModernHomeAppTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(payload["loggedIn"])
+
+    @patch("modern_home_manager.app.create_reservation", return_value={"success": True, "message": "예약이 완료되었습니다."})
+    def test_create_reservation_uses_logged_in_sql_user(self, mock_create):
+        self.login_session()
+        response = self.client.post(
+            "/api/reservations",
+            json={
+                "room_id": 1,
+                "start_time": "2026-05-20T22:00",
+                "end_time": "2026-05-20T22:10",
+                "purpose": "거실 조명 끄기",
+            },
+        )
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(payload["success"])
+        mock_create.assert_called_once_with(
+            user_id=1,
+            room_id=1,
+            start_time="2026-05-20T22:00",
+            end_time="2026-05-20T22:10",
+            purpose="거실 조명 끄기",
+        )
+
+    def test_create_reservation_requires_login(self):
+        response = self.client.post(
+            "/api/reservations",
+            json={"room_id": 1, "start_time": "2026-05-20T22:00", "end_time": "2026-05-20T22:10"},
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    @patch("modern_home_manager.app.update_location", return_value={**DASHBOARD_PAYLOAD["location"], "latitude": 37.1, "longitude": 127.2})
+    def test_update_location_uses_logged_in_sql_user(self, mock_update):
+        self.login_session()
+        response = self.client.post("/api/location", json={"latitude": 37.1, "longitude": 127.2, "accuracy": 15})
+        payload = response.get_json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["latitude"], 37.1)
+        mock_update.assert_called_once_with(user_id=1, latitude=37.1, longitude=127.2, accuracy=15.0)
 
     @patch("modern_home_manager.app.record_device_frame")
     def test_pico_ingest_accepts_frame(self, mock_record):

@@ -865,6 +865,17 @@ button:disabled {
     background-size: auto, auto, 44px 44px, 44px 44px, auto;
 }
 
+.map-visual.has-map {
+    background: rgba(255, 255, 255, 0.42);
+}
+
+.map-visual iframe,
+.large-map iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+}
+
 .sensor-card,
 .map-card,
 .log-card,
@@ -940,6 +951,13 @@ button:disabled {
 
 .location-action {
     margin-top: 10px;
+}
+
+.location-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
 }
 
 .location-action:disabled {
@@ -1300,7 +1318,8 @@ button:disabled {
     gap: 12px;
 }
 
-.login-form label {
+.login-form label,
+.reservation-form label {
     display: grid;
     gap: 6px;
     color: var(--muted);
@@ -1308,7 +1327,9 @@ button:disabled {
     font-weight: 800;
 }
 
-.login-form input {
+.login-form input,
+.reservation-form input,
+.reservation-form select {
     width: 100%;
     height: 42px;
     padding: 0 12px;
@@ -1317,6 +1338,37 @@ button:disabled {
     color: var(--ink);
     background: rgba(255, 255, 255, 0.64);
     font: inherit;
+}
+
+.reservation-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.reservation-form .primary-action,
+.reservation-form .modal-note {
+    grid-column: 1 / -1;
+}
+
+.reservation-modal-section {
+    display: grid;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(101, 133, 148, 0.18);
+}
+
+.reservation-modal-section h3 {
+    margin: 0;
+    font-size: 0.98rem;
+}
+
+.large-map {
+    height: min(58vh, 460px);
+    overflow: hidden;
+    border: 1px solid rgba(101, 133, 148, 0.16);
+    border-radius: var(--radius);
 }
 
 .room-picker {
@@ -1511,5 +1563,9 @@ button:disabled {
     .room-picker img {
         width: 100%;
         height: 120px;
+    }
+
+    .reservation-form {
+        grid-template-columns: 1fr;
     }
 }

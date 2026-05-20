@@ -23,6 +23,7 @@ const elements = {
     locationUpdated: document.querySelector("#location-updated"),
     locationNote: document.querySelector("#location-note"),
     locationButton: document.querySelector("#location-button"),
+    mapVisual: document.querySelector(".map-visual"),
     logList: document.querySelector("#log-list"),
     quickRoomList: document.querySelector("#quick-room-list"),
     gatewayIp: document.querySelector("#gateway-ip"),
@@ -206,12 +207,42 @@ function renderLocation(location) {
     elements.locationUser.textContent = location.user;
     elements.locationTime.textContent = location.time;
     elements.locationUpdated.textContent = location.updated;
+    renderMap(location);
     if (location.source === "browser_geolocation") {
         const accuracy = location.accuracy ? `오차 약 ${location.accuracy}m` : "오차 정보 없음";
         elements.locationNote.textContent = `브라우저 위치 확인됨 · ${accuracy}`;
     } else {
         elements.locationNote.textContent = location.note;
     }
+}
+
+function mapEmbedUrl(latitude, longitude, zoom = 16) {
+    const lat = Number(latitude);
+    const lon = Number(longitude);
+    const delta = zoom >= 16 ? 0.004 : 0.012;
+    const bbox = [
+        (lon - delta).toFixed(6),
+        (lat - delta).toFixed(6),
+        (lon + delta).toFixed(6),
+        (lat + delta).toFixed(6)
+    ].join(",");
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat.toFixed(6)},${lon.toFixed(6)}`;
+}
+
+function renderMap(location) {
+    if (location.latitude == null || location.longitude == null) {
+        elements.mapVisual.innerHTML = `<span class="map-pin"></span>`;
+        elements.mapVisual.classList.remove("has-map");
+        return;
+    }
+    elements.mapVisual.classList.add("has-map");
+    elements.mapVisual.innerHTML = `
+        <iframe
+            title="사용자 현재 위치 지도"
+            src="${escapeHtml(mapEmbedUrl(location.latitude, location.longitude))}"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"></iframe>
+    `;
 }
 
 function renderLogs(logs) {
@@ -462,17 +493,69 @@ function showActuatorsModal() {
 function showReservationsModal() {
     openModal(
         "예약 목록",
-        state.dashboard.reservations.length
-            ? modalList(state.dashboard.reservations.map((item) => `
-                <article>
-                    <time>${escapeHtml(item.time)}</time>
-                    <strong>${escapeHtml(item.title)}</strong>
-                    <span>${escapeHtml(item.repeat)}</span>
-                    <em>${escapeHtml(item.status)}</em>
-                </article>
-            `), "detail-list")
-            : renderEmpty("등록된 예약이 없습니다."),
+        `
+            <form class="reservation-form" id="reservation-form">
+                <label>
+                    <span>방</span>
+                    <select name="room_id" required>
+                        ${state.dashboard.rooms.map((room) => `<option value="${escapeHtml(room.raw_id || room.id)}">${escapeHtml(room.name)}</option>`).join("")}
+                    </select>
+                </label>
+                <label>
+                    <span>시작 시간</span>
+                    <input name="start_time" type="datetime-local" required>
+                </label>
+                <label>
+                    <span>종료 시간</span>
+                    <input name="end_time" type="datetime-local" required>
+                </label>
+                <label>
+                    <span>목적</span>
+                    <input name="purpose" placeholder="예: 거실 조명 끄기">
+                </label>
+                <button class="primary-action" type="submit">예약 추가</button>
+                <p class="modal-note" id="reservation-message">예약은 로그인된 SQL 사용자 계정으로 저장됩니다.</p>
+            </form>
+            <div class="reservation-modal-section">
+                <h3>예약 목록</h3>
+                ${
+                    state.dashboard.reservations.length
+                        ? modalList(state.dashboard.reservations.map((item) => `
+                            <article>
+                                <time>${escapeHtml(item.time)}</time>
+                                <strong>${escapeHtml(item.title)}</strong>
+                                <span>${escapeHtml(item.repeat)}</span>
+                                <em>${escapeHtml(item.status)}</em>
+                            </article>
+                        `), "detail-list")
+                        : renderEmpty("등록된 예약이 없습니다.")
+                }
+            </div>
+        `,
         {action: "show-reservations"}
+    );
+}
+
+function showMapModal() {
+    const location = state.dashboard.location;
+    openModal(
+        "사용자 위치 지도",
+        location.latitude == null || location.longitude == null
+            ? `
+                ${renderEmpty("저장된 좌표가 없습니다. 현재 위치 확인 버튼으로 브라우저 위치 권한을 허용하세요.")}
+                <button class="primary-action" type="button" id="modal-location-button">현재 위치 확인</button>
+            `
+            : `
+                <div class="large-map">
+                    <iframe
+                        title="사용자 현재 위치 큰 지도"
+                        src="${escapeHtml(mapEmbedUrl(location.latitude, location.longitude, 15))}"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"></iframe>
+                </div>
+                <p class="modal-note">위도 ${Number(location.latitude).toFixed(6)}, 경도 ${Number(location.longitude).toFixed(6)}</p>
+            `,
+        {action: "open-map"}
     );
 }
 
@@ -618,6 +701,7 @@ async function handleAction(action, sourceElement) {
     if (action === "show-reservations") showReservationsModal();
     if (action === "show-logs") showLogsModal();
     if (action === "show-rooms") showRoomsModal();
+    if (action === "open-map") showMapModal();
     if (action === "health-check") await runHealthCheck();
     if (action === "logout") await logout();
     if (action === "show-register") showLoginModal("", "register");
@@ -660,6 +744,35 @@ async function logout() {
     closeModal();
 }
 
+async function createReservation(form) {
+    if (!state.session.loggedIn) {
+        showLoginModal("예약을 추가하려면 먼저 로그인하세요.");
+        return;
+    }
+    const message = form.querySelector("#reservation-message");
+    const submitButton = form.querySelector("button[type='submit']");
+    submitButton.disabled = true;
+    message.textContent = "예약 저장 중...";
+    try {
+        const formData = new FormData(form);
+        await fetchJson("/api/reservations", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                room_id: formData.get("room_id"),
+                start_time: formData.get("start_time"),
+                end_time: formData.get("end_time"),
+                purpose: formData.get("purpose")
+            })
+        });
+        await loadDashboard();
+        showReservationsModal();
+    } catch (error) {
+        message.textContent = error.message || "예약 저장에 실패했습니다.";
+        submitButton.disabled = false;
+    }
+}
+
 function requestBrowserLocation() {
     if (!state.session.loggedIn) {
         showLoginModal("현재 위치를 저장하려면 먼저 로그인하세요.");
@@ -685,6 +798,10 @@ function requestBrowserLocation() {
                     })
                 });
                 renderLocation(payload);
+                state.dashboard.location = payload;
+                if (state.activeModal === "open-map") {
+                    showMapModal();
+                }
             } catch (error) {
                 elements.locationNote.textContent = "위치 저장 API 호출에 실패했습니다.";
                 console.error(error);
@@ -729,6 +846,8 @@ function bindEvents() {
                 await toggleActuator(toggleButton);
             } else if (event.target.closest("#location-button")) {
                 requestBrowserLocation();
+            } else if (event.target.closest("#modal-location-button")) {
+                requestBrowserLocation();
             }
         } catch (error) {
             document.body.dataset.error = "true";
@@ -744,9 +863,11 @@ function bindEvents() {
 
     document.addEventListener("submit", async (event) => {
         const form = event.target.closest("#login-form");
-        if (!form) return;
+        const reservationForm = event.target.closest("#reservation-form");
+        if (!form && !reservationForm) return;
         event.preventDefault();
-        await login(form);
+        if (form) await login(form);
+        if (reservationForm) await createReservation(reservationForm);
     });
 
     document.addEventListener("change", (event) => {
