@@ -1,47 +1,47 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from flask import Flask, abort, jsonify, render_template, request
 
 try:
     from modern_home_manager.database import (
-        DEFAULT_DB_PATH,
+        DatabaseUnavailable,
         build_dashboard_payload,
         initialize_database,
+        record_device_frame,
         room_payload,
         set_actuator_active,
         update_location,
     )
 except ModuleNotFoundError:
     from database import (  # type: ignore[no-redef]
-        DEFAULT_DB_PATH,
+        DatabaseUnavailable,
         build_dashboard_payload,
         initialize_database,
+        record_device_frame,
         room_payload,
         set_actuator_active,
         update_location,
     )
 
 
-def create_app(db_path: str | Path | None = None) -> Flask:
+def create_app() -> Flask:
     app = Flask(__name__)
-    database_path = Path(db_path or os.environ.get("MODERN_HOME_DB", DEFAULT_DB_PATH))
-    initialize_database(database_path)
-    app.config["DATABASE_PATH"] = database_path
 
     @app.get("/")
     def dashboard() -> str:
         return render_template("dashboard.html")
 
+    @app.errorhandler(DatabaseUnavailable)
+    def database_unavailable(error):
+        return jsonify({"success": False, "message": str(error)}), 503
+
     @app.get("/api/dashboard")
     def dashboard_api():
-        return jsonify(build_dashboard_payload(app.config["DATABASE_PATH"]))
+        return jsonify(build_dashboard_payload())
 
     @app.get("/api/rooms/<room_id>")
     def room_api(room_id: str):
-        payload = room_payload(app.config["DATABASE_PATH"], room_id)
+        payload = room_payload(room_id)
         if payload is None:
             abort(404, description=f"Unknown room: {room_id}")
         return jsonify(payload)
@@ -60,7 +60,6 @@ def create_app(db_path: str | Path | None = None) -> Flask:
 
         return jsonify(
             update_location(
-                app.config["DATABASE_PATH"],
                 latitude=float(latitude),
                 longitude=float(longitude),
                 accuracy=float(accuracy) if accuracy is not None else None,
@@ -73,7 +72,7 @@ def create_app(db_path: str | Path | None = None) -> Flask:
         if "active" in payload and not isinstance(payload["active"], bool):
             abort(400, description="active must be a boolean")
 
-        dashboard_payload = build_dashboard_payload(app.config["DATABASE_PATH"])
+        dashboard_payload = build_dashboard_payload()
         actuator = next(
             (item for item in dashboard_payload["actuators"] if item["id"] == actuator_id),
             None,
@@ -82,13 +81,21 @@ def create_app(db_path: str | Path | None = None) -> Flask:
             abort(404, description=f"Unknown actuator: {actuator_id}")
 
         active = payload.get("active", not actuator["active"])
-        return jsonify(set_actuator_active(app.config["DATABASE_PATH"], actuator_id, active))
+        return jsonify(set_actuator_active(actuator_id, active))
 
-    @app.post("/api/reset")
-    def reset_database_api():
-        database_path.unlink(missing_ok=True)
-        initialize_database(database_path)
-        return jsonify({"success": True, "message": "database reset"})
+    @app.post("/api/pico/ingest")
+    def pico_ingest_api():
+        payload = request.get_json(silent=True) or {}
+        try:
+            record_device_frame(payload)
+        except ValueError as exc:
+            abort(400, description=str(exc))
+        return jsonify({"success": True, "message": "pico frame saved"})
+
+    @app.get("/api/health")
+    def health_api():
+        initialize_database()
+        return jsonify({"success": True, "database": "mysql"})
 
     return app
 

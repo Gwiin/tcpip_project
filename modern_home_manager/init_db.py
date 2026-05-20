@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 try:
-    from modern_home_manager.database import DEFAULT_DB_PATH, initialize_database
+    from modern_home_manager.database import initialize_database
 except ModuleNotFoundError:
-    from database import DEFAULT_DB_PATH, initialize_database
+    from database import initialize_database
 
 
 def main() -> None:
-    initialize_database(DEFAULT_DB_PATH)
-    print(f"Initialized database: {DEFAULT_DB_PATH}")
+    initialize_database()
+    print("MySQL connection OK. Paste modern_home_manager/mysql_queries.sql first if tables are missing.")
 
 
 if __name__ == "__main__":

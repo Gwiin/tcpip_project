@@ -1,304 +1,167 @@
 from __future__ import annotations
 
-import sqlite3
-from contextlib import closing
+import os
+from contextlib import contextmanager
 from datetime import datetime
-from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_DB_PATH = BASE_DIR / "home_manager.db"
+DB_ENV_DEFAULTS = {
+    "MYSQL_HOST": "127.0.0.1",
+    "MYSQL_PORT": "3306",
+    "MYSQL_USER": "root",
+    "MYSQL_PASSWORD": "",
+    "MYSQL_DB": "Home_Manager",
+}
+
+ROOM_META = {
+    1: {"id": "living", "image": "images/living-room-photo.png", "color": "teal"},
+    2: {"id": "bedroom", "image": "images/bedroom-photo.png", "color": "coral"},
+    3: {"id": "kitchen", "image": "images/kitchen-photo.png", "color": "lime"},
+    4: {"id": "study", "image": "images/bedroom-photo.png", "color": "teal"},
+    5: {"id": "bathroom", "image": "images/kitchen-photo.png", "color": "coral"},
+}
+
+ROOM_ID_BY_SLUG = {meta["id"]: room_id for room_id, meta in ROOM_META.items()}
+
+SENSOR_ICON = {
+    "temperature": "thermometer",
+    "humidity": "drop",
+    "light": "sun",
+    "motion": "user",
+    "co2": "co2",
+    "dust": "sun",
+}
+
+ACTIVE_STATES = {"ON", "COOLING", "HEATING", "OPEN"}
+
+ACTUATOR_ON_STATE = {
+    "light": "ON",
+    "air_conditioner": "COOLING",
+    "fan": "ON",
+    "door_lock": "LOCKED",
+    "curtain": "OPEN",
+}
+
+ACTUATOR_OFF_STATE = {
+    "light": "OFF",
+    "air_conditioner": "OFF",
+    "fan": "OFF",
+    "door_lock": "UNLOCKED",
+    "curtain": "CLOSED",
+}
+
+
+class DatabaseUnavailable(RuntimeError):
+    """Raised when MySQL is not reachable or the driver is missing."""
 
 
 def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+def load_env_file(path: str = ".env") -> None:
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as env_file:
+        for line in env_file:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
-def initialize_database(db_path: str | Path = DEFAULT_DB_PATH) -> None:
-    path = Path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+def db_config() -> dict[str, Any]:
+    load_env_file()
+    return {
+        "host": os.getenv("MYSQL_HOST", DB_ENV_DEFAULTS["MYSQL_HOST"]),
+        "port": int(os.getenv("MYSQL_PORT", DB_ENV_DEFAULTS["MYSQL_PORT"])),
+        "user": os.getenv("MYSQL_USER", DB_ENV_DEFAULTS["MYSQL_USER"]),
+        "password": os.getenv("MYSQL_PASSWORD", DB_ENV_DEFAULTS["MYSQL_PASSWORD"]),
+        "database": os.getenv("MYSQL_DB", DB_ENV_DEFAULTS["MYSQL_DB"]),
+    }
 
-    with closing(connect(path)) as conn:
-        conn.executescript(SCHEMA_SQL)
-        seed_database(conn)
+
+def create_connection():
+    try:
+        import mysql.connector
+    except ModuleNotFoundError as exc:
+        raise DatabaseUnavailable(
+            "mysql-connector-python is not installed. Run: python3 -m pip install -r modern_home_manager/requirements.txt"
+        ) from exc
+
+    try:
+        return mysql.connector.connect(**db_config())
+    except Exception as exc:
+        raise DatabaseUnavailable(f"MySQL connection failed: {exc}") from exc
+
+
+@contextmanager
+def cursor(dictionary: bool = True) -> Iterator[Any]:
+    conn = create_connection()
+    cur = conn.cursor(dictionary=dictionary)
+    try:
+        yield cur
         conn.commit()
+    finally:
+        cur.close()
+        conn.close()
 
 
-def seed_database(conn: sqlite3.Connection) -> None:
-    rooms = [
-        ("living", "거실", "정상", "images/living-room-photo.png", 1, "teal"),
-        ("bedroom", "침실", "정상", "images/bedroom-photo.png", 2, "coral"),
-        ("kitchen", "주방", "정상", "images/kitchen-photo.png", 3, "lime"),
-    ]
-    conn.executemany(
-        """
-        INSERT OR IGNORE INTO rooms
-            (room_id, room_name, status_label, image_path, display_order, chart_color)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        rooms,
-    )
-    conn.executemany(
-        "INSERT OR IGNORE INTO devices (device_id, room_id, device_name) VALUES (?, ?, ?)",
-        [
-            ("pico_living_room", "living", "Pico Living Room Simulator"),
-            ("pico_bedroom", "bedroom", "Pico Bedroom Simulator"),
-            ("pico_kitchen", "kitchen", "Pico Kitchen Simulator"),
-        ],
-    )
-
-    sensors = [
-        ("temp-living", "living", "temperature", "온도", "thermometer", "C"),
-        ("humidity-living", "living", "humidity", "습도", "drop", "%"),
-        ("dust-living", "living", "dust", "미세먼지", "sun", "ug/m3"),
-        ("light-living", "living", "light", "조도", "sun", "lux"),
-        ("co2-living", "living", "co2", "CO2", "co2", "ppm"),
-        ("temp-bedroom", "bedroom", "temperature", "온도", "thermometer", "C"),
-        ("humidity-bedroom", "bedroom", "humidity", "습도", "drop", "%"),
-        ("light-bedroom", "bedroom", "light", "조도", "sun", "lux"),
-        ("temp-kitchen", "kitchen", "temperature", "온도", "thermometer", "C"),
-        ("humidity-kitchen", "kitchen", "humidity", "습도", "drop", "%"),
-        ("light-kitchen", "kitchen", "light", "조도", "sun", "lux"),
-    ]
-    conn.executemany(
-        """
-        INSERT OR IGNORE INTO sensors
-            (sensor_id, room_id, sensor_type, sensor_label, icon, unit)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        sensors,
-    )
-
-    actuators = [
-        ("living-light", "living", "light", "거실 조명", "light", 1, "켜짐"),
-        ("living-ac", "living", "ac", "거실 에어컨", "ac", 1, "냉방 24C"),
-        ("living-curtain", "living", "curtain", "거실 커튼", "curtain", 1, "열림 60%"),
-        ("bedroom-light", "bedroom", "light", "침실 조명", "light", 1, "취침등"),
-        ("bedroom-ac", "bedroom", "ac", "침실 에어컨", "ac", 1, "수면 26C"),
-        ("kitchen-fan", "kitchen", "fan", "환기 팬", "fan", 1, "중간"),
-        ("kitchen-plug", "kitchen", "plug", "주방 콘센트", "plug", 0, "꺼짐"),
-    ]
-    conn.executemany(
-        """
-        INSERT OR IGNORE INTO actuators
-            (actuator_id, room_id, actuator_type, actuator_name, icon, active, detail)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        actuators,
-    )
-
-    conn.executemany(
-        """
-        INSERT OR IGNORE INTO reservations
-            (reservation_id, schedule_time, title, repeat_label, status_label)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        [
-            (1, "22:00", "거실 조명 끄기", "매일", "활성"),
-            (2, "07:00", "거실 커튼 열기", "매일", "활성"),
-            (3, "18:30", "에어컨 켜기 (24C)", "주중", "활성"),
-        ],
-    )
-
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO locations
-            (location_id, user_label, place_label, source, note, updated_at)
-        VALUES (1, '관리자', '집', 'sample',
-                '브라우저 위치 권한을 허용하면 GPS 기반 좌표를 저장합니다.',
-                ?)
-        """,
-        (now_text(),),
-    )
-    conn.execute(
-        """
-        INSERT OR IGNORE INTO system_status
-            (status_id, connection_label, security_label, gateway, firmware, updated_at)
-        VALUES (1, '실시간 연결됨', '해제', '127.0.0.1', 'modern-db-v1', ?)
-        """,
-        (now_text(),),
-    )
-
-    if conn.execute("SELECT COUNT(*) FROM sensor_readings").fetchone()[0] == 0:
-        insert_readings(
-            conn,
-            {
-                "temp-living": 23.4,
-                "humidity-living": 45,
-                "dust-living": 12,
-                "light-living": 386,
-                "co2-living": 540,
-                "temp-bedroom": 21.2,
-                "humidity-bedroom": 50,
-                "light-bedroom": 120,
-                "temp-kitchen": 24.1,
-                "humidity-kitchen": 47,
-                "light-kitchen": 320,
-            },
-        )
-        add_event(conn, "temp", "거실 온도 센서 업데이트", "23.4C")
-        add_event(conn, "ac", "거실 에어컨 설정 변경", "24C 냉방")
-        add_event(conn, "light", "거실 조명 켜짐", "수동")
+def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+    with cursor(dictionary=True) as cur:
+        cur.execute(query, params)
+        return cur.fetchall()
 
 
-def insert_readings(conn: sqlite3.Connection, values: dict[str, float]) -> None:
-    captured_at = now_text()
-    conn.executemany(
-        "INSERT INTO sensor_readings (sensor_id, measured_value, captured_at) VALUES (?, ?, ?)",
-        [(sensor_id, value, captured_at) for sensor_id, value in values.items()],
-    )
+def execute(query: str, params: tuple[Any, ...] = ()) -> None:
+    with cursor(dictionary=False) as cur:
+        cur.execute(query, params)
 
 
-def add_event(conn: sqlite3.Connection, icon: str, message: str, value: str) -> None:
-    conn.execute(
-        "INSERT INTO event_logs (icon, message, value, created_at) VALUES (?, ?, ?, ?)",
-        (icon, message, value, now_text()),
-    )
+def execute_many(statements: list[tuple[str, tuple[Any, ...]]]) -> None:
+    if not statements:
+        return
+    with cursor(dictionary=False) as cur:
+        for query, params in statements:
+            cur.execute(query, params)
 
 
-def build_dashboard_payload(db_path: str | Path = DEFAULT_DB_PATH) -> dict[str, Any]:
-    initialize_database(db_path)
-    with closing(connect(db_path)) as conn:
-        rooms = fetch_rooms(conn)
-        sensors = fetch_latest_sensors(conn)
-        actuators = fetch_actuators(conn)
-        reservations = fetch_reservations(conn)
-        location = fetch_location(conn)
-        logs = fetch_logs(conn)
-        status = fetch_status(conn, rooms, actuators)
-
-    return {
-        "status": status,
-        "sensors": sensors,
-        "temperatures": [
-            {"room": room["name"], "value": room["temperature"], "color": room["color"]}
-            for room in rooms
-        ],
-        "actuators": actuators,
-        "reservations": reservations,
-        "location": location,
-        "logs": logs,
-        "rooms": rooms,
-    }
+def initialize_database() -> None:
+    fetch_all("SELECT 1")
 
 
-def room_payload(db_path: str | Path, room_id: str) -> dict[str, Any] | None:
-    payload = build_dashboard_payload(db_path)
-    room = next((item for item in payload["rooms"] if item["id"] == room_id), None)
-    if room is None:
+def room_slug(room_id: int) -> str:
+    return ROOM_META.get(room_id, {"id": f"room-{room_id}"})["id"]
+
+
+def room_int_id(room_id: str) -> int | None:
+    if room_id.startswith("room-"):
+        try:
+            return int(room_id.removeprefix("room-"))
+        except ValueError:
+            return None
+    return ROOM_ID_BY_SLUG.get(room_id)
+
+
+def actuator_api_id(actuator_id: int) -> str:
+    return f"actuator-{actuator_id}"
+
+
+def actuator_int_id(actuator_id: str) -> int | None:
+    try:
+        return int(actuator_id.removeprefix("actuator-"))
+    except ValueError:
         return None
-    return {
-        "room": room,
-        "actuators": [item for item in payload["actuators"] if item["room"] == room_id],
-        "sensors": [item for item in payload["sensors"] if item["room"] == room_id],
-    }
 
 
-def fetch_rooms(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        """
-        SELECT room_id, room_name, status_label, image_path, chart_color
-        FROM rooms
-        ORDER BY display_order
-        """
-    ).fetchall()
-    rooms = []
-    for row in rows:
-        latest = latest_sensor_values(conn, row["room_id"])
-        rooms.append(
-            {
-                "id": row["room_id"],
-                "name": row["room_name"],
-                "status": row["status_label"],
-                "image": row["image_path"],
-                "temperature": latest.get("temperature", 0),
-                "humidity": round(latest.get("humidity", 0)),
-                "light": round(latest.get("light", 0)),
-                "devices_on": active_device_count(conn, row["room_id"]),
-                "spark": temperature_sparkline(conn, row["room_id"]),
-                "color": row["chart_color"],
-            }
-        )
-    return rooms
-
-
-def latest_sensor_values(conn: sqlite3.Connection, room_id: str) -> dict[str, float]:
-    rows = conn.execute(
-        """
-        SELECT s.sensor_type, sr.measured_value
-        FROM sensors s
-        JOIN sensor_readings sr ON sr.sensor_id = s.sensor_id
-        WHERE s.room_id = ?
-          AND sr.captured_at = (
-              SELECT MAX(sr2.captured_at)
-              FROM sensor_readings sr2
-              WHERE sr2.sensor_id = s.sensor_id
-          )
-        """,
-        (room_id,),
-    ).fetchall()
-    return {row["sensor_type"]: float(row["measured_value"]) for row in rows}
-
-
-def active_device_count(conn: sqlite3.Connection, room_id: str) -> int:
-    return conn.execute(
-        "SELECT COUNT(*) FROM actuators WHERE room_id = ? AND active = 1",
-        (room_id,),
-    ).fetchone()[0]
-
-
-def temperature_sparkline(conn: sqlite3.Connection, room_id: str) -> list[float]:
-    rows = conn.execute(
-        """
-        SELECT sr.measured_value
-        FROM sensor_readings sr
-        JOIN sensors s ON s.sensor_id = sr.sensor_id
-        WHERE s.room_id = ? AND s.sensor_type = 'temperature'
-        ORDER BY sr.captured_at DESC, sr.reading_id DESC
-        LIMIT 9
-        """,
-        (room_id,),
-    ).fetchall()
-    values = [round(float(row["measured_value"]), 1) for row in rows]
-    values.reverse()
-    return values or [0]
-
-
-def fetch_latest_sensors(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    rows = conn.execute(
-        """
-        SELECT s.sensor_id, s.room_id, s.sensor_label, s.sensor_type, s.icon, s.unit,
-               r.room_name, sr.measured_value, sr.captured_at
-        FROM sensors s
-        JOIN rooms r ON r.room_id = s.room_id
-        JOIN sensor_readings sr ON sr.sensor_id = s.sensor_id
-        WHERE sr.captured_at = (
-            SELECT MAX(sr2.captured_at)
-            FROM sensor_readings sr2
-            WHERE sr2.sensor_id = s.sensor_id
-        )
-        ORDER BY r.display_order, s.sensor_id
-        """
-    ).fetchall()
-    return [
-        {
-            "id": row["sensor_id"],
-            "icon": row["icon"],
-            "label": f"{row['sensor_label']} ({row['room_name']})",
-            "value": format_sensor_value(row["sensor_type"], row["measured_value"], row["unit"]),
-            "room": row["room_id"],
-            "time": format_time(row["captured_at"]),
-        }
-        for row in rows
-    ]
+def format_time(value: Any) -> str:
+    if value is None:
+        return "-"
+    if isinstance(value, datetime):
+        return value.strftime("%H:%M:%S")
+    return datetime.fromisoformat(str(value)).strftime("%H:%M:%S")
 
 
 def format_sensor_value(sensor_type: str, value: float, unit: str) -> str:
@@ -306,286 +169,392 @@ def format_sensor_value(sensor_type: str, value: float, unit: str) -> str:
         return f"{float(value):.1f}C"
     if sensor_type in {"humidity", "light", "co2", "dust"}:
         return f"{float(value):.0f} {unit}"
+    if sensor_type == "motion":
+        return "감지" if float(value) else "없음"
     return f"{value} {unit}".strip()
 
 
-def fetch_actuators(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    rows = conn.execute(
+def latest_sensor_values(room_id: int) -> dict[str, float]:
+    rows = fetch_all(
         """
-        SELECT actuator_id, room_id, icon, actuator_name, active, detail
-        FROM actuators
-        ORDER BY room_id, actuator_id
+        SELECT st.type_name, sr.measured_value
+        FROM SENSOR s
+        JOIN SENSOR_TYPE st ON s.sensor_type_id = st.sensor_type_id
+        JOIN SENSOR_READING sr ON sr.sensor_id = s.sensor_id
+        WHERE s.room_id = %s
+          AND sr.reading_id = (
+              SELECT sr2.reading_id
+              FROM SENSOR_READING sr2
+              WHERE sr2.sensor_id = s.sensor_id
+              ORDER BY sr2.measured_time DESC, sr2.reading_id DESC
+              LIMIT 1
+          )
+        """,
+        (room_id,),
+    )
+    return {row["type_name"]: float(row["measured_value"]) for row in rows}
+
+
+def latest_actuator_rows(room_id: int | None = None) -> list[dict[str, Any]]:
+    where = "WHERE a.room_id = %s" if room_id is not None else ""
+    params = (room_id,) if room_id is not None else ()
+    return fetch_all(
+        f"""
+        SELECT a.actuator_id, a.room_id, a.actuator_name, at.type_name,
+               COALESCE(asl.state_value, 'OFF') AS state_value,
+               asl.changed_time
+        FROM ACTUATOR a
+        JOIN ACTUATOR_TYPE at ON a.actuator_type_id = at.actuator_type_id
+        LEFT JOIN ACTUATOR_STATE_LOG asl
+          ON asl.actuator_state_id = (
+              SELECT asl2.actuator_state_id
+              FROM ACTUATOR_STATE_LOG asl2
+              WHERE asl2.actuator_id = a.actuator_id
+              ORDER BY asl2.changed_time DESC, asl2.actuator_state_id DESC
+              LIMIT 1
+          )
+        {where}
+        ORDER BY a.room_id, a.actuator_id
+        """,
+        params,
+    )
+
+
+def active_device_count(room_id: int) -> int:
+    return sum(1 for row in latest_actuator_rows(room_id) if row["state_value"] in ACTIVE_STATES)
+
+
+def temperature_sparkline(room_id: int) -> list[float]:
+    rows = fetch_all(
         """
-    ).fetchall()
+        SELECT sr.measured_value
+        FROM SENSOR_READING sr
+        JOIN SENSOR s ON s.sensor_id = sr.sensor_id
+        JOIN SENSOR_TYPE st ON st.sensor_type_id = s.sensor_type_id
+        WHERE s.room_id = %s AND st.type_name = 'temperature'
+        ORDER BY sr.measured_time DESC, sr.reading_id DESC
+        LIMIT 9
+        """,
+        (room_id,),
+    )
+    values = [round(float(row["measured_value"]), 1) for row in rows]
+    values.reverse()
+    return values or [0]
+
+
+def fetch_rooms() -> list[dict[str, Any]]:
+    rows = fetch_all("SELECT room_id, room_name FROM ROOM ORDER BY room_id")
+    status_rows = {
+        row["room_id"]: row["status_name"]
+        for row in fetch_all(
+            """
+            SELECT rsl.room_id, rst.status_name
+            FROM ROOM_STATUS_LOG rsl
+            JOIN ROOM_STATUS_TYPE rst ON rsl.status_id = rst.status_id
+            WHERE rsl.room_status_log_id = (
+                SELECT rsl2.room_status_log_id
+                FROM ROOM_STATUS_LOG rsl2
+                WHERE rsl2.room_id = rsl.room_id
+                ORDER BY rsl2.changed_time DESC, rsl2.room_status_log_id DESC
+                LIMIT 1
+            )
+            """
+        )
+    }
+    labels = {"IN_USE": "사용중", "EMPTY": "비어있음", "CLEANING": "청소중", "RESERVED": "예약됨"}
+    rooms = []
+    for row in rows:
+        meta = ROOM_META.get(row["room_id"], {"id": f"room-{row['room_id']}", "image": "images/living-room-photo.png", "color": "teal"})
+        latest = latest_sensor_values(row["room_id"])
+        rooms.append(
+            {
+                "id": meta["id"],
+                "name": row["room_name"],
+                "status": labels.get(status_rows.get(row["room_id"], "EMPTY"), "정상"),
+                "image": meta["image"],
+                "temperature": latest.get("temperature", 0),
+                "humidity": round(latest.get("humidity", 0)),
+                "light": round(latest.get("light", latest.get("motion", 0))),
+                "devices_on": active_device_count(row["room_id"]),
+                "spark": temperature_sparkline(row["room_id"]),
+                "color": meta["color"],
+            }
+        )
+    return rooms
+
+
+def fetch_latest_sensors() -> list[dict[str, Any]]:
+    rows = fetch_all(
+        """
+        SELECT s.sensor_id, s.room_id, s.sensor_name, st.type_name, st.unit,
+               r.room_name, sr.measured_value, sr.measured_time
+        FROM SENSOR s
+        JOIN SENSOR_TYPE st ON s.sensor_type_id = st.sensor_type_id
+        JOIN ROOM r ON s.room_id = r.room_id
+        JOIN SENSOR_READING sr ON sr.sensor_id = s.sensor_id
+        WHERE sr.reading_id = (
+            SELECT sr2.reading_id
+            FROM SENSOR_READING sr2
+            WHERE sr2.sensor_id = s.sensor_id
+            ORDER BY sr2.measured_time DESC, sr2.reading_id DESC
+            LIMIT 1
+        )
+        ORDER BY r.room_id, s.sensor_id
+        """
+    )
     return [
         {
-            "id": row["actuator_id"],
-            "room": row["room_id"],
-            "icon": row["icon"],
+            "id": str(row["sensor_id"]),
+            "icon": SENSOR_ICON.get(row["type_name"], "sun"),
+            "label": f"{row['sensor_name']} ({row['room_name']})",
+            "value": format_sensor_value(row["type_name"], row["measured_value"], row["unit"]),
+            "room": room_slug(row["room_id"]),
+            "time": format_time(row["measured_time"]),
+        }
+        for row in rows
+    ]
+
+
+def fetch_actuators(room_id: int | None = None) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": actuator_api_id(row["actuator_id"]),
+            "room": room_slug(row["room_id"]),
+            "icon": "ac" if row["type_name"] == "air_conditioner" else row["type_name"],
             "name": row["actuator_name"],
-            "detail": row["detail"],
-            "active": bool(row["active"]),
+            "detail": row["state_value"],
+            "active": row["state_value"] in ACTIVE_STATES,
         }
-        for row in rows
+        for row in latest_actuator_rows(room_id)
     ]
 
 
-def fetch_reservations(conn: sqlite3.Connection) -> list[dict[str, str]]:
-    rows = conn.execute(
+def fetch_reservations() -> list[dict[str, str]]:
+    rows = fetch_all(
         """
-        SELECT schedule_time, title, repeat_label, status_label
-        FROM reservations
-        ORDER BY schedule_time
+        SELECT rr.start_time, rr.end_time, rr.purpose, rr.reservation_status, r.room_name
+        FROM ROOM_RESERVATION rr
+        JOIN ROOM r ON rr.room_id = r.room_id
+        ORDER BY rr.start_time
+        LIMIT 5
         """
-    ).fetchall()
+    )
+    labels = {"RESERVED": "예약됨", "CANCELLED": "취소됨", "FINISHED": "완료됨"}
     return [
         {
-            "time": row["schedule_time"],
-            "title": row["title"],
-            "repeat": row["repeat_label"],
-            "status": row["status_label"],
+            "time": format_time(row["start_time"]),
+            "title": f"{row['room_name']} {row['purpose'] or '예약'}",
+            "repeat": f"~ {format_time(row['end_time'])}",
+            "status": labels.get(row["reservation_status"], row["reservation_status"]),
         }
         for row in rows
     ]
 
 
-def fetch_location(conn: sqlite3.Connection) -> dict[str, Any]:
-    row = conn.execute("SELECT * FROM locations WHERE location_id = 1").fetchone()
+def fetch_location() -> dict[str, Any]:
+    rows = fetch_all(
+        """
+        SELECT u.user_name, COALESCE(r.room_name, '위치 없음') AS place_label,
+               m.source, m.accuracy, m.latitude, m.longitude, m.note, m.updated_at
+        FROM `USER` u
+        LEFT JOIN USER_LOCATION ul ON u.user_id = ul.user_id
+        LEFT JOIN ROOM r ON ul.room_id = r.room_id
+        LEFT JOIN MODERN_BROWSER_LOCATION m ON m.user_id = u.user_id
+        ORDER BY u.user_id
+        LIMIT 1
+        """
+    )
+    if not rows:
+        return {"user": "관리자", "place": "집", "time": "-", "updated": "-", "source": "none", "accuracy": None, "latitude": None, "longitude": None, "note": "사용자 데이터가 없습니다."}
+    row = rows[0]
+    updated = row.get("updated_at")
     return {
-        "user": row["user_label"],
+        "user": row["user_name"],
         "place": row["place_label"],
-        "time": format_time(row["updated_at"]),
-        "updated": format_time(row["updated_at"]),
-        "source": row["source"],
-        "accuracy": row["accuracy"],
-        "latitude": row["latitude"],
-        "longitude": row["longitude"],
-        "note": row["note"],
+        "time": format_time(updated) if updated else "-",
+        "updated": format_time(updated) if updated else "-",
+        "source": row.get("source") or "mysql",
+        "accuracy": row.get("accuracy"),
+        "latitude": row.get("latitude"),
+        "longitude": row.get("longitude"),
+        "note": row.get("note") or "MySQL USER_LOCATION 기준 위치입니다.",
     }
 
 
-def fetch_logs(conn: sqlite3.Connection) -> list[dict[str, str]]:
-    rows = conn.execute(
+def fetch_logs() -> list[dict[str, str]]:
+    sensor_logs = fetch_all(
         """
-        SELECT icon, message, value, created_at
-        FROM event_logs
-        ORDER BY created_at DESC, event_id DESC
-        LIMIT 8
+        SELECT 'temp' AS icon, CONCAT(r.room_name, ' ', s.sensor_name, ' 업데이트') AS message,
+               CONCAT(ROUND(sr.measured_value, 1), st.unit) AS value,
+               sr.measured_time AS created_at
+        FROM SENSOR_READING sr
+        JOIN SENSOR s ON sr.sensor_id = s.sensor_id
+        JOIN SENSOR_TYPE st ON s.sensor_type_id = st.sensor_type_id
+        JOIN ROOM r ON s.room_id = r.room_id
+        ORDER BY sr.measured_time DESC, sr.reading_id DESC
+        LIMIT 4
         """
-    ).fetchall()
+    )
+    actuator_logs = fetch_all(
+        """
+        SELECT at.type_name AS icon, CONCAT(r.room_name, ' ', a.actuator_name, ' 상태 변경') AS message,
+               asl.state_value AS value, asl.changed_time AS created_at
+        FROM ACTUATOR_STATE_LOG asl
+        JOIN ACTUATOR a ON asl.actuator_id = a.actuator_id
+        JOIN ACTUATOR_TYPE at ON a.actuator_type_id = at.actuator_type_id
+        JOIN ROOM r ON a.room_id = r.room_id
+        ORDER BY asl.changed_time DESC, asl.actuator_state_id DESC
+        LIMIT 4
+        """
+    )
+    rows = sorted(sensor_logs + actuator_logs, key=lambda item: item["created_at"], reverse=True)[:8]
     return [
         {
             "time": format_time(row["created_at"]),
-            "icon": row["icon"],
+            "icon": "ac" if row["icon"] == "air_conditioner" else row["icon"],
             "message": row["message"],
-            "value": row["value"],
+            "value": str(row["value"]),
         }
         for row in rows
     ]
 
 
-def fetch_status(
-    conn: sqlite3.Connection,
-    rooms: list[dict[str, Any]],
-    actuators: list[dict[str, Any]],
-) -> dict[str, Any]:
-    row = conn.execute("SELECT * FROM system_status WHERE status_id = 1").fetchone()
+def fetch_status(rooms: list[dict[str, Any]], actuators: list[dict[str, Any]]) -> dict[str, Any]:
     temperatures = [room["temperature"] for room in rooms if room["temperature"]]
     humidities = [room["humidity"] for room in rooms if room["humidity"]]
     avg_temp = round(sum(temperatures) / len(temperatures), 1) if temperatures else 0
     avg_humidity = round(sum(humidities) / len(humidities)) if humidities else 0
     return {
-        "connection": row["connection_label"],
-        "security": row["security_label"],
+        "connection": "MySQL 연결됨",
+        "security": "해제",
         "averageTemperature": f"{avg_temp:.1f}C",
         "averageHumidity": f"{avg_humidity}%",
         "currentTime": now_text(),
-        "gateway": row["gateway"],
-        "firmware": row["firmware"],
+        "gateway": f"{db_config()['host']}:{db_config()['port']}",
+        "firmware": "modern-mysql-v1",
         "activeDevices": sum(1 for item in actuators if item["active"]),
     }
 
 
-def update_location(
-    db_path: str | Path,
-    latitude: float,
-    longitude: float,
-    accuracy: float | None,
-) -> dict[str, Any]:
-    initialize_database(db_path)
-    updated_at = now_text()
-    with closing(connect(db_path)) as conn:
-        conn.execute(
-            """
-            UPDATE locations
-            SET source = 'browser_geolocation',
-                latitude = ?,
-                longitude = ?,
-                accuracy = ?,
-                note = '브라우저 위치 권한으로 받은 좌표를 저장했습니다.',
-                updated_at = ?
-            WHERE location_id = 1
-            """,
-            (
-                round(float(latitude), 6),
-                round(float(longitude), 6),
-                round(float(accuracy), 1) if accuracy is not None else None,
-                updated_at,
-            ),
-        )
-        add_event(conn, "user", "사용자 위치 업데이트", "브라우저 좌표")
-        conn.commit()
-    with closing(connect(db_path)) as conn:
-        return fetch_location(conn)
+def build_dashboard_payload() -> dict[str, Any]:
+    rooms = fetch_rooms()
+    sensors = fetch_latest_sensors()
+    actuators = fetch_actuators()
+    return {
+        "status": fetch_status(rooms, actuators),
+        "sensors": sensors,
+        "temperatures": [{"room": room["name"], "value": room["temperature"], "color": room["color"]} for room in rooms],
+        "actuators": actuators,
+        "reservations": fetch_reservations(),
+        "location": fetch_location(),
+        "logs": fetch_logs(),
+        "rooms": rooms,
+    }
 
 
-def set_actuator_active(
-    db_path: str | Path,
-    actuator_id: str,
-    active: bool,
-) -> dict[str, Any]:
-    initialize_database(db_path)
-    with closing(connect(db_path)) as conn:
-        row = conn.execute(
-            "SELECT actuator_name FROM actuators WHERE actuator_id = ?",
-            (actuator_id,),
-        ).fetchone()
-        if row is None:
-            raise KeyError(actuator_id)
-        detail = "켜짐" if active else "꺼짐"
-        conn.execute(
-            "UPDATE actuators SET active = ?, detail = ?, updated_at = ? WHERE actuator_id = ?",
-            (1 if active else 0, detail, now_text(), actuator_id),
-        )
-        add_event(conn, "light", f"{row['actuator_name']} 상태 변경", detail)
-        conn.commit()
-    payload = build_dashboard_payload(db_path)
-    return next(item for item in payload["actuators"] if item["id"] == actuator_id)
+def room_payload(room_id: str) -> dict[str, Any] | None:
+    int_id = room_int_id(room_id)
+    if int_id is None:
+        return None
+    payload = build_dashboard_payload()
+    room = next((item for item in payload["rooms"] if item["id"] == room_id), None)
+    if room is None:
+        return None
+    return {
+        "room": room,
+        "actuators": fetch_actuators(int_id),
+        "sensors": [item for item in payload["sensors"] if item["room"] == room_id],
+    }
 
 
-def record_device_frame(db_path: str | Path, payload: dict[str, Any]) -> None:
-    initialize_database(db_path)
+def update_location(latitude: float, longitude: float, accuracy: float | None) -> dict[str, Any]:
+    execute(
+        """
+        INSERT INTO MODERN_BROWSER_LOCATION
+            (user_id, source, latitude, longitude, accuracy, note, updated_at)
+        VALUES (1, 'browser_geolocation', %s, %s, %s, '브라우저 위치 권한으로 받은 좌표를 저장했습니다.', NOW())
+        ON DUPLICATE KEY UPDATE
+            source = VALUES(source),
+            latitude = VALUES(latitude),
+            longitude = VALUES(longitude),
+            accuracy = VALUES(accuracy),
+            note = VALUES(note),
+            updated_at = VALUES(updated_at)
+        """,
+        (round(latitude, 6), round(longitude, 6), round(accuracy, 1) if accuracy is not None else None),
+    )
+    return fetch_location()
+
+
+def set_actuator_active(actuator_id: str, active: bool) -> dict[str, Any]:
+    int_id = actuator_int_id(actuator_id)
+    if int_id is None:
+        raise KeyError(actuator_id)
+    rows = fetch_all(
+        """
+        SELECT a.actuator_id, at.type_name
+        FROM ACTUATOR a
+        JOIN ACTUATOR_TYPE at ON a.actuator_type_id = at.actuator_type_id
+        WHERE a.actuator_id = %s
+        """,
+        (int_id,),
+    )
+    if not rows:
+        raise KeyError(actuator_id)
+    state = (ACTUATOR_ON_STATE if active else ACTUATOR_OFF_STATE).get(rows[0]["type_name"], "ON" if active else "OFF")
+    execute(
+        "INSERT INTO ACTUATOR_STATE_LOG (actuator_id, state_value, changed_time) VALUES (%s, %s, NOW())",
+        (int_id, state),
+    )
+    return next(item for item in fetch_actuators() if item["id"] == actuator_id)
+
+
+def record_device_frame(payload: dict[str, Any]) -> None:
     device_id = payload.get("device_id")
     if not isinstance(device_id, str) or not device_id:
         raise ValueError("device_id is required")
 
-    with closing(connect(db_path)) as conn:
-        room = conn.execute(
-            "SELECT room_id FROM devices WHERE device_id = ?",
-            (device_id,),
-        ).fetchone()
-        if room is None:
-            raise ValueError(f"unknown device_id: {device_id}")
+    rows = fetch_all("SELECT room_id FROM DEVICE WHERE device_id = %s", (device_id,))
+    if not rows:
+        raise ValueError(f"unknown device_id: {device_id}")
+    room_id = rows[0]["room_id"]
 
-        sensor_values = {}
-        for sensor_type, value in (payload.get("sensors") or {}).items():
-            sensor = conn.execute(
-                "SELECT sensor_id FROM sensors WHERE room_id = ? AND sensor_type = ?",
-                (room["room_id"], sensor_type),
-            ).fetchone()
-            if sensor is not None:
-                sensor_values[sensor["sensor_id"]] = float(value)
-        if sensor_values:
-            insert_readings(conn, sensor_values)
-
-        for actuator_id, active in (payload.get("actuators") or {}).items():
-            exists = conn.execute(
-                "SELECT actuator_name FROM actuators WHERE actuator_id = ?",
-                (actuator_id,),
-            ).fetchone()
-            if exists is None:
-                continue
-            detail = "켜짐" if bool(active) else "꺼짐"
-            conn.execute(
-                "UPDATE actuators SET active = ?, detail = ?, updated_at = ? WHERE actuator_id = ?",
-                (1 if bool(active) else 0, detail, now_text(), actuator_id),
+    statements: list[tuple[str, tuple[Any, ...]]] = []
+    for sensor_type, value in (payload.get("sensors") or {}).items():
+        sensor_rows = fetch_all(
+            """
+            SELECT s.sensor_id
+            FROM SENSOR s
+            JOIN SENSOR_TYPE st ON s.sensor_type_id = st.sensor_type_id
+            WHERE s.room_id = %s AND st.type_name = %s
+            """,
+            (room_id, sensor_type),
+        )
+        if sensor_rows:
+            statements.append(
+                (
+                    "INSERT INTO SENSOR_READING (sensor_id, measured_value, measured_time) VALUES (%s, %s, NOW())",
+                    (sensor_rows[0]["sensor_id"], float(value)),
+                )
             )
 
-        add_event(conn, "temp", f"{device_id} 시뮬레이션 수신", "저장됨")
-        conn.commit()
+    for actuator_type, state in (payload.get("actuators") or {}).items():
+        actuator_rows = fetch_all(
+            """
+            SELECT a.actuator_id
+            FROM ACTUATOR a
+            JOIN ACTUATOR_TYPE at ON a.actuator_type_id = at.actuator_type_id
+            WHERE a.room_id = %s AND at.type_name = %s
+            """,
+            (room_id, actuator_type),
+        )
+        if actuator_rows:
+            state_value = str(state).upper() if not isinstance(state, bool) else ("ON" if state else "OFF")
+            statements.append(
+                (
+                    "INSERT INTO ACTUATOR_STATE_LOG (actuator_id, state_value, changed_time) VALUES (%s, %s, NOW())",
+                    (actuator_rows[0]["actuator_id"], state_value),
+                )
+            )
 
-
-def format_time(value: str) -> str:
-    return datetime.fromisoformat(value).strftime("%H:%M:%S")
-
-
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS rooms (
-    room_id TEXT PRIMARY KEY,
-    room_name TEXT NOT NULL,
-    status_label TEXT NOT NULL,
-    image_path TEXT NOT NULL,
-    display_order INTEGER NOT NULL,
-    chart_color TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sensors (
-    sensor_id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL REFERENCES rooms(room_id),
-    sensor_type TEXT NOT NULL,
-    sensor_label TEXT NOT NULL,
-    icon TEXT NOT NULL,
-    unit TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sensor_readings (
-    reading_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    sensor_id TEXT NOT NULL REFERENCES sensors(sensor_id),
-    measured_value REAL NOT NULL,
-    captured_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS actuators (
-    actuator_id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL REFERENCES rooms(room_id),
-    actuator_type TEXT NOT NULL,
-    actuator_name TEXT NOT NULL,
-    icon TEXT NOT NULL,
-    active INTEGER NOT NULL CHECK (active IN (0, 1)),
-    detail TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS reservations (
-    reservation_id INTEGER PRIMARY KEY,
-    schedule_time TEXT NOT NULL,
-    title TEXT NOT NULL,
-    repeat_label TEXT NOT NULL,
-    status_label TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS locations (
-    location_id INTEGER PRIMARY KEY,
-    user_label TEXT NOT NULL,
-    place_label TEXT NOT NULL,
-    source TEXT NOT NULL,
-    accuracy REAL,
-    latitude REAL,
-    longitude REAL,
-    note TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS system_status (
-    status_id INTEGER PRIMARY KEY,
-    connection_label TEXT NOT NULL,
-    security_label TEXT NOT NULL,
-    gateway TEXT NOT NULL,
-    firmware TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS devices (
-    device_id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL REFERENCES rooms(room_id),
-    device_name TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS event_logs (
-    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    icon TEXT NOT NULL,
-    message TEXT NOT NULL,
-    value TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-"""
+    execute_many(statements)
