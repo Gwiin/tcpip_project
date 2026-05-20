@@ -558,3 +558,22 @@ def record_device_frame(payload: dict[str, Any]) -> None:
             )
 
     execute_many(statements)
+
+
+def main() -> None:
+    config = db_config()
+    print("Modern Home Manager MySQL config")
+    print(f"- host: {config['host']}")
+    print(f"- port: {config['port']}")
+    print(f"- user: {config['user']}")
+    print(f"- database: {config['database']}")
+    print("- password: " + ("set" if config["password"] else "empty"))
+
+    initialize_database()
+    rows = fetch_all("SELECT COUNT(*) AS room_count FROM ROOM")
+    print("[OK] MySQL connection successful")
+    print(f"[OK] ROOM rows: {rows[0]['room_count']}")
+
+
+if __name__ == "__main__":
+    main()
