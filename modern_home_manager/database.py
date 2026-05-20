@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import hmac
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Iterator
+
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 DB_ENV_DEFAULTS = {
@@ -484,6 +487,72 @@ def update_location(latitude: float, longitude: float, accuracy: float | None) -
         (round(latitude, 6), round(longitude, 6), round(accuracy, 1) if accuracy is not None else None),
     )
     return fetch_location()
+
+
+def authenticate_user(name: str, password: str) -> dict[str, Any] | None:
+    rows = fetch_all(
+        """
+        SELECT u.user_id, u.user_name, u.pw, ur.role_name
+        FROM `USER` u
+        LEFT JOIN USER_ROLE ur ON u.role_id = ur.role_id
+        WHERE u.user_name = %s
+        """,
+        (name,),
+    )
+    if not rows:
+        return None
+    stored_password = rows[0]["pw"]
+    password_matches = False
+    try:
+        password_matches = check_password_hash(stored_password, password)
+    except ValueError:
+        password_matches = False
+    if not password_matches and hmac.compare_digest(stored_password, password):
+        execute(
+            "UPDATE `USER` SET pw = %s WHERE user_id = %s",
+            (generate_password_hash(password, method="pbkdf2:sha256"), rows[0]["user_id"]),
+        )
+        password_matches = True
+    if not password_matches:
+        return None
+    return {
+        "user_id": rows[0]["user_id"],
+        "user_name": rows[0]["user_name"],
+        "role": rows[0].get("role_name") or "MEMBER",
+    }
+
+
+def create_user_account(name: str, password: str) -> dict[str, Any]:
+    existing = fetch_all("SELECT user_id FROM `USER` WHERE user_name = %s", (name,))
+    if existing:
+        raise ValueError("이미 존재하는 사용자명입니다.")
+
+    execute_many(
+        [
+            (
+                """
+                INSERT INTO `USER` (user_id, role_id, user_name, pw)
+                SELECT COALESCE(MAX(user_id), 0) + 1, %s, %s, %s
+                FROM `USER`
+                """,
+                (3, name, generate_password_hash(password, method="pbkdf2:sha256")),
+            ),
+            (
+                """
+                INSERT INTO USER_LOCATION (user_id, room_id)
+                SELECT user_id, NULL
+                FROM `USER`
+                WHERE user_name = %s
+                """,
+                (name,),
+            ),
+        ]
+    )
+
+    user = authenticate_user(name, password)
+    if user is None:
+        raise RuntimeError("생성한 계정을 확인할 수 없습니다.")
+    return user
 
 
 def set_actuator_active(actuator_id: str, active: bool) -> dict[str, Any]:

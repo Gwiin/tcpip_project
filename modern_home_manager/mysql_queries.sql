@@ -140,9 +140,20 @@ INSERT IGNORE INTO USER_ROLE (role_id, role_name) VALUES
 (3, 'GUEST');
 
 INSERT IGNORE INTO `USER` (user_id, role_id, pw, user_name) VALUES
-(1, 1, 'admin123', '관리자'),
-(2, 2, 'member123', '가족'),
-(3, 3, 'guest123', '손님');
+(1, 1, 'pbkdf2:sha256:1000000$S5Y9spM8pbe0Tc2B$3c354bbc2376fd0875ae7ba2d279f2b405d7b71f1e582ae5ce9da1ce9c2d7bc0', '관리자'),
+(2, 2, 'pbkdf2:sha256:1000000$tSRmFIRMImpNqrJE$c1b5d5a81e28763a0d0559d092d756eae066dd3b6a9169febdd1e31331759ff6', '가족'),
+(3, 3, 'pbkdf2:sha256:1000000$Jw9bsbN0vDkDG1bz$5ff666237eec83342829a3ba0801d142e386a040a990e3bde93f011457177481', '손님');
+
+UPDATE `USER`
+SET pw = CASE user_name
+    WHEN '관리자' THEN 'pbkdf2:sha256:1000000$S5Y9spM8pbe0Tc2B$3c354bbc2376fd0875ae7ba2d279f2b405d7b71f1e582ae5ce9da1ce9c2d7bc0'
+    WHEN '가족' THEN 'pbkdf2:sha256:1000000$tSRmFIRMImpNqrJE$c1b5d5a81e28763a0d0559d092d756eae066dd3b6a9169febdd1e31331759ff6'
+    WHEN '손님' THEN 'pbkdf2:sha256:1000000$Jw9bsbN0vDkDG1bz$5ff666237eec83342829a3ba0801d142e386a040a990e3bde93f011457177481'
+    ELSE pw
+END
+WHERE (user_name = '관리자' AND pw = 'admin123')
+   OR (user_name = '가족' AND pw = 'member123')
+   OR (user_name = '손님' AND pw = 'guest123');
 
 INSERT IGNORE INTO SENSOR_TYPE (sensor_type_id, type_name, unit) VALUES
 (1, 'temperature', 'C'),

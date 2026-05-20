@@ -48,7 +48,7 @@
                 <svg class="mini-wave" viewBox="0 0 120 36" aria-hidden="true">
                     <path d="M2 24C10 8 16 28 23 18s12 4 18 0 10-16 17-4 14 18 20 2 11-10 18-2 12 8 22-4"></path>
                 </svg>
-                <button class="settings-button" type="button">설정</button>
+                <button class="settings-button" type="button" data-action="settings">설정</button>
             </section>
         </aside>
 
@@ -63,8 +63,8 @@
                 <div class="status-item"><span class="icon-thermo" aria-hidden="true"></span><div><small>실내 평균</small><strong id="avg-temp">-</strong></div></div>
                 <div class="status-item"><span class="icon-drop" aria-hidden="true"></span><div><small>실내 습도</small><strong id="avg-humidity">-</strong></div></div>
                 <div class="status-item"><span class="icon-clock" aria-hidden="true"></span><div><small>현재 시간</small><strong id="current-time">-</strong></div></div>
-                <button class="icon-button notice" type="button" aria-label="알림"><span class="icon-bell"></span><b>2</b></button>
-                <button class="profile-button" type="button"><span class="avatar-icon"></span><span>관리자<br><small>admin</small></span><span class="chevron"></span></button>
+                <button class="icon-button notice" type="button" aria-label="알림" data-action="notice"><span class="icon-bell"></span><b id="notice-count">0</b></button>
+                <button class="profile-button" type="button" data-action="profile"><span class="avatar-icon"></span><span><span id="profile-name">Guest</span><br><small id="profile-role">로그인 필요</small></span><span class="chevron"></span></button>
             </section>
 
             <div class="content-grid">
@@ -74,20 +74,20 @@
                             <h1>스마트홈 대시보드</h1>
                             <p>MySQL DB, Flask API, Pico simulator로 실시간처럼 변하는 홈 상태를 확인합니다.</p>
                         </div>
-                        <button class="edit-button" type="button"><span class="icon-sliders"></span>대시보드 편집</button>
+                        <button class="edit-button" type="button" data-action="edit-dashboard"><span class="icon-sliders"></span>대시보드 편집</button>
                     </header>
 
                     <section class="cards-grid" aria-label="대시보드 카드">
-                        <article class="card liquid-card sensor-card">
+                        <article class="card liquid-card sensor-card" data-card="sensors">
                             <header class="card-header">
                                 <h2>최신 센서 값</h2>
                                 <span class="tiny-wave"></span>
                             </header>
                             <div class="sensor-list" id="sensor-list"></div>
-                            <button class="text-action" type="button">센서 더보기 <span>→</span></button>
+                            <button class="text-action" type="button" data-action="show-sensors">센서 더보기 <span>→</span></button>
                         </article>
 
-                        <article class="card liquid-card chart-card">
+                        <article class="card liquid-card chart-card" data-card="temperature">
                             <header class="card-header">
                                 <h2>방별 평균 온도</h2>
                                 <span>C</span>
@@ -96,19 +96,19 @@
                             <p class="chart-average">전체 평균 <strong id="chart-average">-</strong></p>
                         </article>
 
-                        <article class="card liquid-card actuator-card">
+                        <article class="card liquid-card actuator-card" data-card="actuators">
                             <header class="card-header"><h2>현재 동작 중인 장치</h2></header>
                             <div class="actuator-list" id="actuator-list"></div>
-                            <button class="text-action" type="button">장치 더보기 <span>→</span></button>
+                            <button class="text-action" type="button" data-action="show-actuators">장치 더보기 <span>→</span></button>
                         </article>
 
-                        <article class="card liquid-card schedule-card">
+                        <article class="card liquid-card schedule-card" data-card="reservations">
                             <header class="card-header"><h2>예약 / 스케줄</h2></header>
                             <div class="reservation-list" id="reservation-list"></div>
-                            <button class="text-action" type="button">예약 목록 보기 <span>→</span></button>
+                            <button class="text-action" type="button" data-action="show-reservations">예약 목록 보기 <span>→</span></button>
                         </article>
 
-                        <article class="card liquid-card map-card">
+                        <article class="card liquid-card map-card" data-card="location">
                             <header class="card-header"><h2>사용자 위치</h2><span class="home-chip">집</span></header>
                             <div class="map-visual" aria-label="사용자 위치 지도">
                                 <span class="map-pin"></span>
@@ -124,10 +124,10 @@
                             <button class="text-action location-action" id="location-button" type="button">현재 위치 확인 <span>→</span></button>
                         </article>
 
-                        <article class="card liquid-card log-card">
+                        <article class="card liquid-card log-card" data-card="logs">
                             <header class="card-header"><h2>최근 로그</h2></header>
                             <div class="log-list" id="log-list"></div>
-                            <button class="text-action" type="button">로그 더보기 <span>→</span></button>
+                            <button class="text-action" type="button" data-action="show-logs">로그 더보기 <span>→</span></button>
                         </article>
                     </section>
                 </section>
@@ -137,7 +137,7 @@
                         <h2>빠른 방 정보</h2>
                     </header>
                     <div class="quick-room-list" id="quick-room-list"></div>
-                    <button class="all-room-button" type="button">모든 방 보기 <span>→</span></button>
+                    <button class="all-room-button" type="button" data-action="show-rooms">모든 방 보기 <span>→</span></button>
                 </aside>
             </div>
 
@@ -149,6 +149,8 @@
             </footer>
         </main>
     </div>
+
+    <div class="modal-root" id="modal-root" aria-live="polite"></div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
