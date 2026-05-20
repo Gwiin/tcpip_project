@@ -523,11 +523,13 @@ function showReservationsModal() {
                         ? modalList(state.dashboard.reservations.map((item) => `
                             <article>
                                 <time>${escapeHtml(item.time)}</time>
-                                <strong>${escapeHtml(item.title)}</strong>
-                                <span>${escapeHtml(item.repeat)}</span>
+                                <div>
+                                    <strong>${escapeHtml(item.title)}</strong>
+                                    <span>${escapeHtml(item.repeat)}</span>
+                                </div>
                                 <em>${escapeHtml(item.status)}</em>
                             </article>
-                        `), "detail-list")
+                        `), "reservation-detail-list")
                         : renderEmpty("등록된 예약이 없습니다.")
                 }
             </div>
